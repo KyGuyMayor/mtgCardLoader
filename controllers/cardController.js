@@ -1,28 +1,27 @@
-const mtg = require('mtgsdk');
+const scry = require('scryfall-sdk');
 
-exports.index = (req, res) => {
+exports.index = async (req, res) => {
+    const query = req.query.name ? 'name:' + req.query.name : 'name:aa';
     const page = req.query.page ? req.query.page : 1;
-    mtg.card.where({ page: page, pageSize: 50, language: "english" }).then(cards => {
-        res.send(cards);
-    })
+
+    const cards = await scry.Cards.search(query, page).cancelAfterPage().waitForAll();
+
+    return res.send(cards);
 };
 
-exports.get = (req, res) => {
-    mtg.card.find(req.params.id).then(result => {
-        res.send(result);
-    });
+exports.get = async (req, res) => {
+    const card = await scry.Cards.byId(req.params.id);
+
+    res.send(card);
 };
 
 exports.find = (req, res) => {
-    mtg.card.where({ name: req.params.query}).then(cards => {
-        res.send(cards);
-    });
-};
+    const cards = [];
 
-exports.commander = (req, res) => {
-    const page = req.query.page ? req.query.page : 1;
-    mtg.card.where({ gameFormat: "commander", page: page, pageSize: 50 })
-    .then(cards => {
-        res.send(cards);
+    scry.Cards.search('name:' + req.params.query).on('data', card => {
+        cards.push(card);
+    })
+    .on('done', () => {
+        return res.send(JSON.stringify(cards));
     });
 };
