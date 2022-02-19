@@ -4,7 +4,7 @@ const port = process.env.PORT || 5000; //Line 3
 const router = express.Router();
 const card = require('../router/card');
 
-app.use('/card', card);
+app.use('/cards', card);
 
 // This displays message that the server running and listening to specified port
 app.listen(port, () => console.log(`Listening on port ${port}`)); //Line 6
