@@ -1,5 +1,4 @@
 const express = require('express');
-const { card } = require('mtgsdk');
 const router = express.Router();
 
 const cardController = require('../controllers/cardController');
