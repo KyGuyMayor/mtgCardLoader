@@ -8,6 +8,8 @@ import { AutoComplete, InputGroup } from 'rsuite';
  */
 const SearchBar = (props) => {
   const [data, setData] = useState([]);
+  const [selected, setSelected] = useState(false);
+
   const term = props.term;
   const setTerm = props.setTerm;
   const retrieve = props.retrieve;
@@ -22,6 +24,10 @@ const SearchBar = (props) => {
 
           if (formatedResults.length === 1 && onSelect) {
             onSelect(formatedResults[0]);
+          } else if (selected) {
+            const selectedResult = formatedResults.find(card => card.name === term);
+
+            onSelect(selectedResult);
           }
 
           formatedResults.forEach((result) => {
@@ -42,9 +48,7 @@ const SearchBar = (props) => {
 
   return (
     <InputGroup>
-      <AutoComplete placeholder='Enter Card Name' data={data} onChange={setTerm} onSelect={(e) => {
-        console.log(e);
-      }} />
+      <AutoComplete placeholder='Enter Card Name' data={data} onChange={setTerm} onSelect={setSelected} />
     </InputGroup>
   );
 }
