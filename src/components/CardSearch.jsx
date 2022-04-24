@@ -4,6 +4,10 @@ import { Button, Content, InputGroup } from 'rsuite';
 import NavigationBar from './NavigationBar';
 import SearchBar from './SearchBar';
 
+/**
+ * Renders the card search select box.
+ * @returns React Component
+ */
 const CardSearch = () => {
   const [active, setActive] = useState('cardSearch');
   const [term, setTerm] = useState('');

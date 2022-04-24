@@ -2,6 +2,10 @@ import React, { useState } from 'react';
 
 import NavigationBar from './NavigationBar';
 
+/**
+ * Renders the home page of the website
+ * @returns React Component
+ */
 const Home = () => {
   const [active, setActive] = useState('home');
 

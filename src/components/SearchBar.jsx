@@ -4,7 +4,7 @@ import { AutoComplete, InputGroup } from 'rsuite';
 /**
  * Renders a react auto complete search bar.
  * @param {object} props Properties containing term, setTerm, and retrieve. Retrieve must be a promise
- * @returns 
+ * @returns React Component
  */
 const SearchBar = (props) => {
   const [data, setData] = useState([]);
@@ -14,7 +14,11 @@ const SearchBar = (props) => {
   const setTerm = props.setTerm;
   const retrieve = props.retrieve;
   const onSelect = props.onSelect;
+
   useEffect(() => {
+    /**
+     * Retrieves cards matching the provided terms.
+     */
     const fetchData = async () => {
       if (term && term.length >= 3) {
         try {
@@ -48,7 +52,12 @@ const SearchBar = (props) => {
 
   return (
     <InputGroup>
-      <AutoComplete placeholder='Enter Card Name' data={data} onChange={setTerm} onSelect={setSelected} />
+      <AutoComplete
+        placeholder='Enter a Card Name. Minimum 3 characters to search'
+        data={data}
+        onChange={setTerm}
+        onSelect={setSelected}
+      />
     </InputGroup>
   );
 }

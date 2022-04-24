@@ -1,6 +1,11 @@
 import React from 'react';
 import { Navbar, Nav } from 'rsuite';
 
+/**
+ * Renders an rsuite navbar with links to navigate the website.
+ * @param {*} props
+ * @returns a React Component 
+ */
 const NavigationBar = (props) => {
   return (
     <Navbar appearance="inverse">
