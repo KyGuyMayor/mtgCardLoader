@@ -3,7 +3,7 @@ import { Navbar, Nav } from 'rsuite';
 
 const NavigationBar = (props) => {
   return (
-    <Navbar>
+    <Navbar appearance="inverse">
       <Navbar.Brand href="/">MTG Card Loader</Navbar.Brand>
       <Nav activeKey={props.active} onSelect={props.setActive}>
         <Nav.Item href="/" eventKey="home">Home</Nav.Item>
