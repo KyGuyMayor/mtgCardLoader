@@ -1,11 +1,19 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import './index.css';
-import Home from './components/Home';
 import reportWebVitals from './reportWebVitals';
+import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
+import 'rsuite/dist/rsuite.min.css';
+
+import { Home, CardSearch } from './components';
 
 ReactDOM.render(
-  <Home />,
+  <Router>
+    <Routes>
+      <Route path="/" element={<Home />} />
+      <Route path="/cardsearch" element={<CardSearch />} />
+    </Routes>
+  </Router>,
   document.getElementById('root')
 );
 
