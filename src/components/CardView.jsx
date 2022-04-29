@@ -1,6 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Container, Content } from 'rsuite';
+import {
+  CustomProvider,
+  Container,
+  Content,
+  FlexboxGrid,
+  Panel
+} from 'rsuite';
 
 import NavigationBar from './NavigationBar';
 
@@ -29,10 +35,13 @@ const CardView = () => {
   }, [id]);
 
   return (
-    <>
+    <CustomProvider theme="dark">
       <Container>
         <NavigationBar active={active} setActive={setActive} />
-          <Content>
+          <Content style={{ marginTop: "15px" }}>
+            <FlexboxGrid justify="center">
+            <FlexboxGrid.Item colspan={8} style={{ paddingRight: "10px" }}>
+              <Panel bordered>
             <div>
               <p>Name: {card?.name}</p>
               <p>Power: {card?.power}</p>
@@ -44,9 +53,19 @@ const CardView = () => {
               <p><a onClick={goToTCGPlayer}>TCG Player</a></p>
               <p><a onClick={goToCardMarket}>Card Market</a></p>
           </div>
+          </Panel>
+            </FlexboxGrid.Item>
+            <FlexboxGrid.Item colspan={4}>
+                <img
+                  src={card?.image_uris?.normal}
+                  alt="new"
+                  height="500"
+                />
+            </FlexboxGrid.Item>
+          </FlexboxGrid>
         </Content>
       </Container>
-    </>
+    </CustomProvider>
   );
 }
 

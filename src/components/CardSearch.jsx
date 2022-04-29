@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Button, Content, InputGroup } from 'rsuite';
+import { Button, Content, CustomProvider, InputGroup } from 'rsuite';
 
 import NavigationBar from './NavigationBar';
 import SearchBar from './SearchBar';
@@ -32,15 +32,15 @@ const CardSearch = () => {
   }
 
   return (
-    <div>
+    <CustomProvider theme="dark">
       <NavigationBar active={active} setActive={setActive} />
-      <Content>
+      <Content style={{ marginTop: "15px" }}>
         <InputGroup style={styles}>
           <SearchBar term={term} retrieve={search} setTerm={setTerm} onSelect={setCard} />
           <Button onClick={goToCard}>Select</Button>
         </InputGroup>
       </Content>
-    </div>
+    </CustomProvider>
   )
 }
 
