@@ -5,6 +5,7 @@ import {
   Container,
   Content,
   FlexboxGrid,
+  Form,
   Panel
 } from 'rsuite';
 
@@ -39,28 +40,37 @@ const CardView = () => {
       <Container>
         <NavigationBar active={active} setActive={setActive} />
           <Content style={{ marginTop: "15px" }}>
-            <FlexboxGrid justify="center">
-            <FlexboxGrid.Item colspan={8} style={{ paddingRight: "10px" }}>
-              <Panel bordered>
-            <div>
-              <p>Name: {card?.name}</p>
-              <p>Power: {card?.power}</p>
-              <p>Toughness: {card?.toughness}</p>
-              <p>Approximate Cost: ${card?.prices?.usd || card?.prices?.usd_foil}</p>
-              <p>Set: {card?.set_name}</p>
-              <p>Commander Legality: {card?.legalities?.commander === "legal" ? "Legal" : "Not Legal"}</p>
-              <p>Ability: {card?.oracle_text}</p>
-              <p><a onClick={goToTCGPlayer}>TCG Player</a></p>
-              <p><a onClick={goToCardMarket}>Card Market</a></p>
-          </div>
-          </Panel>
-            </FlexboxGrid.Item>
+            <FlexboxGrid justify="center" align="top">
+              <FlexboxGrid.Item colspan={8} style={{ paddingRight: "10px" }}>
+                <Panel bordered>
+                    <h2 style={{ marginBottom: "25px"}}>{card?.name}</h2>
+                    {card?.power && 
+                      <>
+                        <p><b>Power:</b> {card?.power}</p>
+                        <p><b>Toughness:</b> {card?.toughness}</p>
+                      </>
+                    }
+                    {card?.loyalty &&
+                      <>
+                        <p><b>Loyalty:</b> {card?.loyalty}</p>
+                      </>
+                    }
+                    <p><b>Approximate Cost:</b> ${card?.prices?.usd || card?.prices?.usd_foil}</p>
+                    <p><b>Set:</b> {card?.set_name}</p>
+                    <p><b>Commander Legality:</b> {card?.legalities?.commander === "legal" ? "Legal" : "Not Legal"}</p>
+                    <p><b>Standard Legality:</b> {card?.legalities?.standard === "legal" ? "Legal" : "Not Legal"}</p>
+                    <p><b>Ability:</b> {card?.oracle_text}</p>
+                    <h5 style={{marginTop: "25px"}}>Purchase Links</h5>
+                    <p><a onClick={goToTCGPlayer}>TCG Player</a></p>
+                    <p><a onClick={goToCardMarket}>Card Market</a></p>
+                </Panel>
+              </FlexboxGrid.Item>
             <FlexboxGrid.Item colspan={4}>
-                <img
-                  src={card?.image_uris?.normal}
-                  alt="new"
-                  height="500"
-                />
+              <img
+                src={card?.image_uris?.png}
+                alt="new"
+                height="475"
+              />
             </FlexboxGrid.Item>
           </FlexboxGrid>
         </Content>
