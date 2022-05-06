@@ -13,17 +13,9 @@ import Link from '../Shared/Link';
 import NavigationBar from '../Shared/NavigationBar';
 
 const CardView = () => {
-  const {id}= useParams();
+  const {id} = useParams();
   const [card, setCard] =  useState();
   const [active, setActive] = useState('cardSearch');
-
-  const goToTCGPlayer = () => {
-    window.open(card?.purchase_uris?.tcgplayer);
-  };
-
-  const goToCardMarket = () => {
-    window.open(card?.purchase_uris?.cardmarket);
-  };
 
   useEffect(() => {
     const fetchData = async () => {
