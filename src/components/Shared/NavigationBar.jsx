@@ -1,13 +1,13 @@
 import React from 'react';
-import { Navbar, Nav } from 'rsuite';
+import { Header, Navbar, Nav } from 'rsuite';
 
 /**
  * Renders an rsuite navbar with links to navigate the website.
  * @param {*} props
  * @returns a React Component 
  */
-const NavigationBar = (props) => {
-  return (
+const NavigationBar = (props) => (
+  <Header>
     <Navbar appearance="inverse">
       <Navbar.Brand href="/">MTG Card Loader</Navbar.Brand>
       <Nav activeKey={props.active} onSelect={props.setActive}>
@@ -20,7 +20,7 @@ const NavigationBar = (props) => {
         <Nav.Item href="/settings" eventKey="settings">Settings</Nav.Item>
       </Nav>
     </Navbar>
-  );
-};
+  </Header>
+);
 
 export default NavigationBar;

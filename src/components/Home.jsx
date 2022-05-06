@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
+import { CustomProvider } from 'rsuite';
 
-import NavigationBar from './NavigationBar';
+import NavigationBar from './Shared/NavigationBar';
 
 /**
  * Renders the home page of the website
@@ -10,10 +11,10 @@ const Home = () => {
   const [active, setActive] = useState('home');
 
   return (
-    <div>
+    <CustomProvider theme="dark">
       <NavigationBar active={active} setActive={setActive} />
       <div>Welcome to MTG Card Loader</div>
-    </div>
+    </CustomProvider>
   );
 };
 
