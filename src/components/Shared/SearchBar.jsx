@@ -26,9 +26,7 @@ const SearchBar = (props) => {
           const formatedResults = JSON.parse(results);
           const cardNames = [];
 
-          if (formatedResults.length === 1 && onSelect) {
-            onSelect(formatedResults[0]);
-          } else if (selected) {
+          if (selected) {
             const selectedResult = formatedResults.find(card => card.name === term);
 
             onSelect(selectedResult);

@@ -5,11 +5,12 @@ import {
   Container,
   Content,
   FlexboxGrid,
-  Form,
   Panel
 } from 'rsuite';
 
-import NavigationBar from './NavigationBar';
+import CardStat from './CardStat';
+import Link from '../Shared/Link';
+import NavigationBar from '../Shared/NavigationBar';
 
 const CardView = () => {
   const {id}= useParams();
@@ -28,7 +29,6 @@ const CardView = () => {
     const fetchData = async () => {
       const cardData  = await fetch(`/cards/${id}`);
       const cardJSON = await cardData.json();
-      console.log(cardJSON);
       setCard(cardJSON);
     } 
        
@@ -46,23 +46,27 @@ const CardView = () => {
                   <h2 style={{ marginBottom: "25px"}}>{card?.name}</h2>
                   {card?.power && 
                     <>
-                      <p><b>Power:</b> {card?.power}</p>
-                      <p><b>Toughness:</b> {card?.toughness}</p>
+                      <CardStat title="Power" value={card?.power} />
+                      <CardStat title="Toughness" value={card?.toughness} />
                     </>
                   }
                   {card?.loyalty &&
                     <>
+                      <CardStat title="Loyalty" value={card?.loyalty} />
                       <p><b>Loyalty:</b> {card?.loyalty}</p>
                     </>
                   }
-                  <p><b>Approximate Cost:</b> ${card?.prices?.usd || card?.prices?.usd_foil}</p>
-                  <p><b>Set:</b> {card?.set_name}</p>
-                  <p><b>Commander Legality:</b> {card?.legalities?.commander === "legal" ? "Legal" : "Not Legal"}</p>
-                  <p><b>Standard Legality:</b> {card?.legalities?.standard === "legal" ? "Legal" : "Not Legal"}</p>
-                  <p><b>Ability:</b> {card?.oracle_text}</p>
+                  <CardStat title="Approximate Cost" value={"$" + card?.prices?.usd} />
+                  {card?.prices.usd_foil &&
+                    <CardStat title="Approximate Foil Cost" value={"$" + card?.prices?.usd_foil} />
+                  }
+                  <CardStat title="Set" value={card?.set_name} />
+                  <CardStat title="Commander Legality" value={card?.legalities?.commander === "legal" ? "Legal" : "Not Legal"} />
+                  <CardStat title="Standard Legality" value={card?.legalities?.standard === "legal" ? "Legal" : "Not Legal"} />
+                  <CardStat title="Ability" value={card?.oracle_text} />
                   <h5 style={{marginTop: "25px"}}>Purchase Links</h5>
-                  <p><a onClick={goToTCGPlayer}>TCG Player</a></p>
-                  <p><a onClick={goToCardMarket}>Card Market</a></p>
+                  <Link url={card?.purchase_uris?.tcgplayer} title="TCG Player" />
+                  <Link url={card?.purchase_uris?.cardmarket} title="Card Market" />
                 </Panel>
               </FlexboxGrid.Item>
             <FlexboxGrid.Item colspan={4}>

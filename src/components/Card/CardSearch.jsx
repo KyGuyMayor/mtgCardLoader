@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Button, Content, CustomProvider, InputGroup } from 'rsuite';
+import { Content, CustomProvider, InputGroup } from 'rsuite';
 
-import NavigationBar from './NavigationBar';
-import SearchBar from './SearchBar';
+import NavigationBar from '../Shared/NavigationBar';
+import SearchBar from '../Shared/SearchBar';
 
 /**
  * Renders the card search select box.
@@ -11,14 +11,13 @@ import SearchBar from './SearchBar';
 const CardSearch = () => {
   const [active, setActive] = useState('cardSearch');
   const [term, setTerm] = useState('');
-  const [card, setCard] = useState();
   const search = async (searchTerm) => {
     const results =  await fetch(`/cards/search/${searchTerm}`);
     const data = await results.text();
     return data;
   };
 
-  const goToCard = () => {
+  const goToCard = (card) => {
     if (card && card.id) {
       window.location.assign(`/cardsearch/${card.id}`);
     }
@@ -36,8 +35,7 @@ const CardSearch = () => {
       <NavigationBar active={active} setActive={setActive} />
       <Content style={{ marginTop: "15px" }}>
         <InputGroup style={styles}>
-          <SearchBar term={term} retrieve={search} setTerm={setTerm} onSelect={setCard} />
-          <Button onClick={goToCard}>Select</Button>
+          <SearchBar term={term} retrieve={search} setTerm={setTerm} onSelect={goToCard} />
         </InputGroup>
       </Content>
     </CustomProvider>

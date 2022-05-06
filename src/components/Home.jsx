@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { CustomProvider } from 'rsuite';
 
-import NavigationBar from './NavigationBar';
+import NavigationBar from './Shared/NavigationBar';
 
 /**
  * Renders the home page of the website
