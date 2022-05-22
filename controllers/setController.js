@@ -1,7 +1,7 @@
 const scry = require('scryfall-sdk');
 const fuzzysort = require('fuzzysort');
 
-exports.search = async (req, res) => {
+exports.find = async (req, res) => {
   const query = req.params.query;
 
   scry.setFuzzySearch((search, targts, key) => {
@@ -21,4 +21,17 @@ exports.search = async (req, res) => {
   const set = await scry.Sets.byName(query,  true);
 
   return  res.send(set);
+}
+
+exports.get = async (req, res) => {
+  const set = await scry.Sets.byId(req.params.id);
+  set.cards = await set.getCards()
+
+  res.send(set);
+}
+
+exports.index = async (req, res) => {
+  const sets = await scry.Sets.all();
+
+  res.send(sets);
 }
