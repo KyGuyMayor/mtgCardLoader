@@ -35,7 +35,7 @@ const CardSearch = () => {
       <NavigationBar active={active} setActive={setActive} />
       <Content style={{ marginTop: "15px" }}>
         <InputGroup style={styles}>
-          <SearchBar term={term} retrieve={search} setTerm={setTerm} onSelect={goToCard} />
+          <SearchBar term={term} retrieve={search} setTerm={setTerm} onSelect={goToCard} placeholder={'Enter a Card Name. Minimum 3 characters to search'} />
         </InputGroup>
       </Content>
     </CustomProvider>

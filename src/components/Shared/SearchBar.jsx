@@ -14,6 +14,7 @@ const SearchBar = (props) => {
   const setTerm = props.setTerm;
   const retrieve = props.retrieve;
   const onSelect = props.onSelect;
+  const placeholder = props.placeholder;
 
   useEffect(() => {
     /**
@@ -51,7 +52,7 @@ const SearchBar = (props) => {
   return (
     <InputGroup>
       <AutoComplete
-        placeholder='Enter a Card Name. Minimum 3 characters to search'
+        placeholder={placeholder}
         data={data}
         onChange={setTerm}
         onSelect={setSelected}

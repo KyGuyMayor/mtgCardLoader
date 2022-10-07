@@ -5,7 +5,7 @@ import reportWebVitals from './reportWebVitals';
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import 'rsuite/dist/rsuite.min.css';
 
-import { Home, CardSearch, CardView } from './components';
+import { Home, CardSearch, CardView, SetSearch, SetView } from './components';
 
 ReactDOM.render(
   <Router>
@@ -13,6 +13,8 @@ ReactDOM.render(
       <Route path="/" element={<Home />} />
       <Route path="/cardsearch" element={<CardSearch />} />
       <Route path="/cardsearch/:id" element={<CardView />} />
+      <Route path="/setsearch" element={<SetSearch />} />
+      <Route path="/set/:id" element={<SetView />} />
     </Routes>
   </Router>,
   document.getElementById('root')
