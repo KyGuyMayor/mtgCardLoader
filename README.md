@@ -4,7 +4,7 @@
 
 ## Getting Started
 run `yarn install`
-run `node server/server.js`
+run `node server.js`
 in a new terminal tab run `yarn start`.
 
 ## External APIs
