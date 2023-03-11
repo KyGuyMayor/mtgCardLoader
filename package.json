@@ -30,7 +30,7 @@
   },
   "scripts": {
     "start": "react-app-rewired start webpack serve --mode development",
-    "server": "node server/server",
+    "server": "node server.js",
     "build": "react-app-rewired build",
     "test": "react-app-rewired test",
     "eject": "react-app-rewired eject"

@@ -38,6 +38,7 @@ exports.find = async (req, res) => {
 exports.get = async (req, res) => {
   const set = await scry.Sets.byId(req.params.id);
   set.cards = await set.getCards()
+  console.log(set.cards);
 
   return res.send(set);
 }
