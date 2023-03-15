@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { isMobile } from 'react-device-detect';
 import {
   CustomProvider,
   Container,
@@ -32,6 +33,9 @@ const SetView = () => {
       flexGrow: 1,
       sortable: false
     },
+  ];
+  
+  const desktopColumns = [
     {
       key: 'rarity',
       label: 'Rarity',
@@ -68,6 +72,8 @@ const SetView = () => {
     window.location.assign(`/cardsearch/${rowObject.id}`);
   }
 
+  const columns = isMobile ? defaultColumns : defaultColumns.concat(desktopColumns);
+
   return (
     <CustomProvider theme="dark">
       <Container>
@@ -79,7 +85,8 @@ const SetView = () => {
             height={window.innerHeight - 100}
             onRowClick={handleClick}
             virtualized
-          >{defaultColumns.map(column => {
+          >
+            {columns.map(column => {
             const { key, label, ...rest } = column;
             return (
               <Column {...rest} key={key}>
