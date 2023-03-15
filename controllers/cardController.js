@@ -1,3 +1,4 @@
+const { rest } = require('lodash');
 const scry = require('scryfall-sdk');
 
 exports.index = async (req, res) => {
