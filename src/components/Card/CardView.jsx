@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { isMobile } from 'react-device-detect';
 import {
   CustomProvider,
   Container,
@@ -33,7 +34,7 @@ const CardView = () => {
         <NavigationBar active={active} setActive={setActive} />
           <Content style={{ marginTop: "15px" }}>
             <FlexboxGrid justify="center" align="top">
-              <FlexboxGrid.Item colspan={8} style={{ paddingRight: "10px" }}>
+              <FlexboxGrid.Item colspan={isMobile ? 20 : 14} style={{ paddingRight: isMobile ? "0px" : "10px" }}>
                 <Panel bordered>
                   <h2 style={{ marginBottom: "25px"}}>{card?.name}</h2>
                   {card?.power && 
@@ -61,13 +62,16 @@ const CardView = () => {
                   <Link url={card?.purchase_uris?.cardmarket} title="Card Market" />
                 </Panel>
               </FlexboxGrid.Item>
-            <FlexboxGrid.Item colspan={4}>
-              <img
-                src={card?.image_uris?.png}
-                alt="new"
-                height="475"
-              />
-            </FlexboxGrid.Item>
+              
+            {!isMobile &&
+              <FlexboxGrid.Item colspan={4}>
+                <img
+                  src={card?.image_uris?.png}
+                  alt="new"
+                  height="475"
+                />
+              </FlexboxGrid.Item>
+            }
           </FlexboxGrid>
         </Content>
       </Container>

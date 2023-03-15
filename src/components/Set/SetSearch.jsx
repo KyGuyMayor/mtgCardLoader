@@ -23,11 +23,18 @@ const SetSearch = () => {
     }
   };
 
+  const styles = {
+    width: '95%',
+    marginLeft: 'auto',
+    marginRight: 'auto',
+    border: 'none'
+  }
+
    return (
     <CustomProvider theme="dark">
       <NavigationBar active={active} setActive={setActive} />
       <Content style={{ marginTop: "15px" }}>
-        <InputGroup>
+        <InputGroup styles={styles}>
           <SearchBar term={term} retrieve={search} setTerm={setTerm} onSelect={goToSet} placeholder={'Enter a Set Name. Minimum 3 characters to search'} />
         </InputGroup>
       </Content>
