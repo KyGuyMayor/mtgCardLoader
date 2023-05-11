@@ -33,7 +33,7 @@
     "start": "react-app-rewired start webpack serve --mode development",
     "server": "node server.js",
     "build": "react-app-rewired build",
-    "test": "react-app-rewired test",
+    "test": "jest",
     "eject": "react-app-rewired eject"
   },
   "proxy": "http://localhost:5000",
@@ -54,5 +54,8 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "jest": "^29.5.0"
   }
 }
