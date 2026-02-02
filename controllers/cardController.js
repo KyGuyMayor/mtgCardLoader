@@ -1,6 +1,6 @@
-const scry = require('scryfall-sdk');
 
 exports.index = async (req, res) => {
+  const scry = require('scryfall-sdk');
   const query = req.query.name ? 'name:' + req.query.name : 'name:aa';
   const page = req.query.page ? req.query.page : 1;
 
@@ -10,6 +10,7 @@ exports.index = async (req, res) => {
 };
 
 exports.get = async (req, res) => {
+  const scry = require('scryfall-sdk');
   try {
     const card = await scry.Cards.byId(req.params.id);
 
@@ -20,6 +21,7 @@ exports.get = async (req, res) => {
 };
 
 exports.find = (req, res) => {
+  const scry = new require('scryfall-sdk');
   const cards = [];
 
   scry.Cards.search('name:' + req.params.query).on('data', card => {
@@ -28,4 +30,11 @@ exports.find = (req, res) => {
   .on('done', () => {
     return res.send(JSON.stringify(cards));
   });
+};
+
+exports.random = async (req, res) => {
+  const scry = require('scryfall-sdk');
+  const card = await scry.Cards.random();
+
+  return res.send(card);
 };

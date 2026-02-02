@@ -47,7 +47,7 @@ const SearchBar = (props) => {
     }
 
     fetchData();
-  }, [term]);
+  }, [term, retrieve, selected, onSelect]);
 
   return (
     <InputGroup>

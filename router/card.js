@@ -9,4 +9,6 @@ router.get('/:id', cardController.get);
 
 router.get('/search/:query', cardController.find);
 
+router.get('/random', cardController.random);
+
 module.exports = router;
