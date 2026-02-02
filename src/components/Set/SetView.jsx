@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { isMobile } from 'react-device-detect';
 import {
@@ -9,29 +9,41 @@ import {
 } from 'rsuite';
 
 import NavigationBar from '../Shared/NavigationBar';
+import SetFilters from './SetFilters';
 
 const { Column, HeaderCell, Cell } = Table;
+
+const RARITY_ORDER = {
+  'common': 0,
+  'uncommon': 1,
+  'rare': 2,
+  'mythic': 3
+};
 
 const SetView = () => {
   const {id} = useParams();
   const [set, setSet] =  useState([]);
   const [active, setActive] = useState('setSearch');
-  /**
-   * TODO: Add sort and enable sort for name, type, rarity, and color
-   */
+  const [sortColumn, setSortColumn] = useState(null);
+  const [sortType, setSortType] = useState(null);
+  const [nameSearch, setNameSearch] = useState('');
+  const [colorFilter, setColorFilter] = useState([]);
+  const [rarityFilter, setRarityFilter] = useState([]);
+  const [typeFilter, setTypeFilter] = useState([]);
+
   const defaultColumns = [
     {
       key: 'name',
       label: 'Name',
       fixed: true,
       flexGrow: 1,
-      sortable: false
+      sortable: true
     },
     {
       key: 'type_line',
       label: 'Type',
       flexGrow: 1,
-      sortable: false
+      sortable: true
     },
   ];
   
@@ -40,7 +52,7 @@ const SetView = () => {
       key: 'rarity',
       label: 'Rarity',
       flexGrow: 1,
-      sortable: false
+      sortable: true
     },
     {
       key: 'colors',
@@ -68,9 +80,93 @@ const SetView = () => {
     fetchData();
   }, []);
 
+  const handleSortColumn = (dataKey, newSortType) => {
+    if (sortColumn === dataKey) {
+      if (sortType === 'asc') {
+        setSortType('desc');
+      } else if (sortType === 'desc') {
+        setSortColumn(null);
+        setSortType(null);
+      } else {
+        setSortType('asc');
+      }
+    } else {
+      setSortColumn(dataKey);
+      setSortType('asc');
+    }
+  };
+
+  const filteredData = useMemo(() => {
+    let result = set;
+
+    if (nameSearch) {
+      const searchLower = nameSearch.toLowerCase();
+      result = result.filter(card => 
+        card.name?.toLowerCase().includes(searchLower)
+      );
+    }
+
+    if (colorFilter.length > 0) {
+      result = result.filter(card => {
+        const cardColors = card.colors || [];
+        const isColorless = cardColors.length === 0;
+        const isMulticolor = cardColors.length > 1;
+
+        if (colorFilter.includes('C') && isColorless) return true;
+        if (colorFilter.includes('M') && isMulticolor) return true;
+        return colorFilter.some(c => c !== 'C' && c !== 'M' && cardColors.includes(c));
+      });
+    }
+
+    if (rarityFilter.length > 0) {
+      result = result.filter(card => 
+        rarityFilter.includes(card.rarity?.toLowerCase())
+      );
+    }
+
+    if (typeFilter.length > 0) {
+      result = result.filter(card => 
+        typeFilter.some(type => card.type_line?.includes(type))
+      );
+    }
+
+    return result;
+  }, [set, nameSearch, colorFilter, rarityFilter, typeFilter]);
+
+  const sortedData = useMemo(() => {
+    if (!sortColumn || !sortType) {
+      return filteredData;
+    }
+
+    return [...filteredData].sort((a, b) => {
+      const aValue = a[sortColumn] || '';
+      const bValue = b[sortColumn] || '';
+
+      if (sortColumn === 'rarity') {
+        const aRank = RARITY_ORDER[aValue.toLowerCase()] ?? 99;
+        const bRank = RARITY_ORDER[bValue.toLowerCase()] ?? 99;
+        return sortType === 'asc' ? aRank - bRank : bRank - aRank;
+      }
+
+      if (sortType === 'asc') {
+        return aValue.localeCompare(bValue);
+      }
+      return bValue.localeCompare(aValue);
+    });
+  }, [filteredData, sortColumn, sortType]);
+
   const handleClick = (rowObject) => {
     window.location.assign(`/cardsearch/${rowObject.id}`);
   }
+
+  const handleClearFilters = () => {
+    setNameSearch('');
+    setColorFilter([]);
+    setRarityFilter([]);
+    setTypeFilter([]);
+    setSortColumn(null);
+    setSortType(null);
+  };
 
   const columns = isMobile ? defaultColumns : defaultColumns.concat(desktopColumns);
 
@@ -79,12 +175,28 @@ const SetView = () => {
       <Container>
         <NavigationBar active={active} setActive={setActive} />
         <Content>
+          <SetFilters
+            nameSearch={nameSearch}
+            setNameSearch={setNameSearch}
+            colorFilter={colorFilter}
+            setColorFilter={setColorFilter}
+            rarityFilter={rarityFilter}
+            setRarityFilter={setRarityFilter}
+            typeFilter={typeFilter}
+            setTypeFilter={setTypeFilter}
+            onClearFilters={handleClearFilters}
+            totalCards={set.length}
+            filteredCount={sortedData.length}
+          />
           <Table
             loading={set?.length == 0}
-            data={set}
+            data={sortedData}
             height={window.innerHeight - 100}
             onRowClick={handleClick}
             virtualized
+            sortColumn={sortColumn}
+            sortType={sortType}
+            onSortColumn={handleSortColumn}
           >
             {columns.map(column => {
             const { key, label, ...rest } = column;

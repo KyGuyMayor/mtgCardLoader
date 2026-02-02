@@ -11,6 +11,9 @@
 # production
 /build
 
+# ai
+/scripts/ralph
+
 # misc
 .DS_Store
 .env.local
