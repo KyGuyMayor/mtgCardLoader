@@ -95,6 +95,9 @@ MTG players need an easy way to look up card information, check prices, verify f
 9. **Trade Lists** - Create want/have lists
 10. **Offline Support** - PWA with cached data
 
+### Bugs
+1. **Double sided cards do not load on Card Search** - Fix case of // in card name resulting in errors.
+
 ## Non-Functional Requirements
 
 | Requirement | Target |
