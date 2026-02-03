@@ -1,5 +1,22 @@
 const scry = require('scryfall-sdk');
 const fuzzysort = require('fuzzysort');
+const { rateLimitedRequest, RateLimitTimeoutError } = require('../src/helpers/rateLimiter');
+
+/**
+ * Handles timeout errors by returning 503 status.
+ * @param {Error} error - The error to handle
+ * @param {object} res - Express response object
+ * @returns {boolean} - True if error was handled, false otherwise
+ */
+function handleTimeoutError(error, res) {
+  if (error instanceof RateLimitTimeoutError) {
+    return res.status(503).json({
+      error: 'Service Unavailable',
+      message: error.message
+    });
+  }
+  return false;
+}
 
 /**
  * Retrieves sets that match a given search parameter.
@@ -25,9 +42,14 @@ exports.find = async (req, res) => {
     return results;
   });
 
-  const set = await scry.Sets.byName(query,  true);
+  try {
+    const set = await rateLimitedRequest(() => scry.Sets.byName(query, true));
 
-  return  res.send(set);
+    return res.send(set);
+  } catch (e) {
+    if (handleTimeoutError(e, res)) return;
+    return res.status(500).json({ error: 'Internal Server Error', message: e.message });
+  }
 }
 
 /**
@@ -37,10 +59,15 @@ exports.find = async (req, res) => {
  * @returns {json} JSON string of an array containing a ScryFall Set.
  */
 exports.get = async (req, res) => {
-  const set = await scry.Sets.byId(req.params.id);
-  set.cards = await set.getCards()
+  try {
+    const set = await rateLimitedRequest(() => scry.Sets.byId(req.params.id));
+    set.cards = await rateLimitedRequest(() => set.getCards());
 
-  return res.send(set);
+    return res.send(set);
+  } catch (e) {
+    if (handleTimeoutError(e, res)) return;
+    return res.status(500).json({ error: 'Internal Server Error', message: e.message });
+  }
 }
 
 /**
@@ -50,7 +77,12 @@ exports.get = async (req, res) => {
  * @returns {json} JSON string of an array of scryFall set objects.
  */
 exports.index = async (req, res) => {
-  const sets = await scry.Sets.all();
+  try {
+    const sets = await rateLimitedRequest(() => scry.Sets.all());
 
-  return res.send(sets);
+    return res.send(sets);
+  } catch (e) {
+    if (handleTimeoutError(e, res)) return;
+    return res.status(500).json({ error: 'Internal Server Error', message: e.message });
+  }
 }

@@ -1,40 +1,69 @@
+const scry = require('scryfall-sdk');
+const { rateLimitedRequest, RateLimitTimeoutError } = require('../src/helpers/rateLimiter');
+
+/**
+ * Handles timeout errors by returning 503 status.
+ * @param {Error} error - The error to handle
+ * @param {object} res - Express response object
+ * @returns {boolean} - True if error was handled, false otherwise
+ */
+function handleTimeoutError(error, res) {
+  if (error instanceof RateLimitTimeoutError) {
+    return res.status(503).json({
+      error: 'Service Unavailable',
+      message: error.message
+    });
+  }
+  return false;
+}
 
 exports.index = async (req, res) => {
-  const scry = require('scryfall-sdk');
   const query = req.query.name ? 'name:' + req.query.name : 'name:aa';
   const page = req.query.page ? req.query.page : 1;
 
-  const cards = await scry.Cards.search(query, page).cancelAfterPage().waitForAll();
+  try {
+    const cards = await rateLimitedRequest(() => 
+      scry.Cards.search(query, page).cancelAfterPage().waitForAll()
+    );
 
-  return res.send(cards);
+    return res.send(cards);
+  } catch (e) {
+    if (handleTimeoutError(e, res)) return;
+    return res.status(500).json({ error: 'Internal Server Error', message: e.message });
+  }
 };
 
 exports.get = async (req, res) => {
-  const scry = require('scryfall-sdk');
   try {
-    const card = await scry.Cards.byId(req.params.id);
+    const card = await rateLimitedRequest(() => scry.Cards.byId(req.params.id));
 
     res.send(card);
   } catch (e) {
+    if (handleTimeoutError(e, res)) return;
     return res.status(404).send('Not Found');
   }
 };
 
-exports.find = (req, res) => {
-  const scry = new require('scryfall-sdk');
-  const cards = [];
+exports.find = async (req, res) => {
+  try {
+    const cards = await rateLimitedRequest(() => 
+      scry.Cards.search('name:' + req.params.query).waitForAll()
+    );
 
-  scry.Cards.search('name:' + req.params.query).on('data', card => {
-    cards.push(card);
-  })
-  .on('done', () => {
     return res.send(JSON.stringify(cards));
-  });
+  } catch (e) {
+    if (handleTimeoutError(e, res)) return;
+    return res.status(500).json({ error: 'Internal Server Error', message: e.message });
+  }
 };
 
 exports.random = async (req, res) => {
-  const scry = require('scryfall-sdk');
-  const card = await scry.Cards.random();
+  try {
+    const card = await rateLimitedRequest(() => scry.Cards.random());
 
-  return res.send(card);
+    return res.send(card);
+  } catch (e) {
+    if (handleTimeoutError(e, res)) return;
+    return res.status(500).json({ error: 'Internal Server Error', message: e.message });
+  }
 };

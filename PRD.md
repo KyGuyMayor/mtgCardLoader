@@ -49,6 +49,17 @@ MTG players need an easy way to look up card information, check prices, verify f
 - Columns: Name, Type (mobile)
 - Click row to view card details
 
+### 6. Detailed Collection Tracker
+- **Status**: Not Implemented
+- Virtualized table of all cards the user owns.
+- Columns: Name, Type, Rarity, Colors, Printing (desktop), Price at purchase (desktop), Condition
+- Columns: Name, Type (mobile)
+- Click row to view card details of the specific printing owned.
+- Ability to track and view printings owned and how many.
+- Requires that the user is able to authenticate.
+- Requires a storage mechanism.
+
+
 ## Technical Architecture
 
 ### Frontend
@@ -96,7 +107,8 @@ MTG players need an easy way to look up card information, check prices, verify f
 10. **Offline Support** - PWA with cached data
 
 ### Bugs
-1. **Double sided cards do not load on Card Search** - Fix case of // in card name resulting in errors.
+1. **Double sided cards do not load on Card Search** - *** Fixed *** - Fix case of // in card name resulting in errors.
+2. **Honor Scryfall rate limit restrictions** - *** Fixed *** - The scryfall API requires that we  50 – 100 milliseconds of delay between the requests or we face rate limits and protential bans.
 
 ## Non-Functional Requirements
 
