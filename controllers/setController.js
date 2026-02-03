@@ -30,7 +30,6 @@ exports.find = async (req, res) => {
   scry.setFuzzySearch((search, targts, key) => {
     results = fuzzysort.go(search, targts, { key }).map((element) => {
       if (element.obj.set_type == 'expansion' || element.obj.set_type == "masters" || element.obj.set_type == "core") {
-        console.log(element);
         return element.obj;
       }
     }).filter((set) => {
