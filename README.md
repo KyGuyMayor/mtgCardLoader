@@ -64,9 +64,10 @@ yarn start
 
 | Variable | Description | Default |
 |----------|-------------|---------|
+| `NODE_ENV` | Environment mode. Set to `production` to use production database config. | `development` |
 | `RATE_LIMIT_DEBUG` | Set to `true` to enable rate limiter logging. Shows queue position and wait times for Scryfall API requests. | `false` |
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://mtguser:mtgpassword@localhost:5432/mtgcardloader` |
-| `JWT_SECRET` | Secret key for JWT token signing | (required in production) |
+| `DATABASE_URL` | PostgreSQL connection string. Used directly in production; in development, falls back to local Docker credentials. | `postgresql://mtguser:mtgpassword@localhost:5432/mtgcardloader` |
+| `JWT_SECRET` | Secret key for JWT token signing. | (required in production) |
 
 Example:
 ```bash
