@@ -13,7 +13,7 @@ yarn install
 ### 2. Start PostgreSQL Database
 Start the local PostgreSQL instance using Docker Compose:
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 This starts a PostgreSQL 15 container with:
@@ -25,12 +25,12 @@ This starts a PostgreSQL 15 container with:
 
 To stop the database:
 ```bash
-docker-compose down
+docker compose down
 ```
 
 To stop and remove all data:
 ```bash
-docker-compose down -v
+docker compose down -v
 ```
 
 ### 3. Run Database Migrations
