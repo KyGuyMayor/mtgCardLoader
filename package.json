@@ -13,6 +13,7 @@
     "babel-loader": "^8.2.3",
     "bcrypt": "^6.0.0",
     "customize-cra": "^1.0.0",
+    "dotenv": "^17.2.4",
     "express": "^4.17.3",
     "fuzzysort": "^1.2.1",
     "jsonwebtoken": "^9.0.3",
