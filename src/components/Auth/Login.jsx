@@ -6,7 +6,6 @@ import NavigationBar from '../Shared/NavigationBar';
 import { useAuth } from './AuthContext';
 
 const Login = () => {
-  const [active, setActive] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -55,7 +54,7 @@ const Login = () => {
 
   return (
     <CustomProvider theme="dark">
-      <NavigationBar active={active} setActive={setActive} />
+      <NavigationBar />
       <Container>
         <Content>
           <Panel header="Login" bordered style={styles.panel}>

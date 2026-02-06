@@ -5,7 +5,6 @@ import { useNavigate } from 'react-router-dom';
 import NavigationBar from '../Shared/NavigationBar';
 
 const Register = () => {
-  const [active, setActive] = useState('register');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -61,7 +60,7 @@ const Register = () => {
 
   return (
     <CustomProvider theme="dark">
-      <NavigationBar active={active} setActive={setActive} />
+      <NavigationBar />
       <Container>
         <Content>
           <Panel header="Register" bordered style={styles.panel}>

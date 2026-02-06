@@ -23,7 +23,6 @@ const RARITY_ORDER = {
 const SetView = () => {
   const {id} = useParams();
   const [set, setSet] =  useState([]);
-  const [active, setActive] = useState('setSearch');
   const [sortColumn, setSortColumn] = useState(null);
   const [sortType, setSortType] = useState(null);
   const [nameSearch, setNameSearch] = useState('');
@@ -173,7 +172,7 @@ const SetView = () => {
   return (
     <CustomProvider theme="dark">
       <Container>
-        <NavigationBar active={active} setActive={setActive} />
+        <NavigationBar />
         <Content>
           <SetFilters
             nameSearch={nameSearch}
