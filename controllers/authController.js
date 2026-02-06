@@ -5,6 +5,7 @@ const db = require('../src/db');
 const SALT_ROUNDS = 10;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const JWT_EXPIRY = '7d';
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-do-not-use-in-production';
 
 exports.register = async (req, res) => {
   const { email, password } = req.body;
@@ -56,7 +57,7 @@ exports.login = async (req, res) => {
 
     const token = jwt.sign(
       { id: user.id, email: user.email },
-      process.env.JWT_SECRET,
+      JWT_SECRET,
       { expiresIn: JWT_EXPIRY }
     );
 
