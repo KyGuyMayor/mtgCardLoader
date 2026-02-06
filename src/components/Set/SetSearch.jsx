@@ -9,7 +9,6 @@ import SearchBar from '../Shared/SearchBar';
  * @returns React Component
  */
 const SetSearch = () => {
-  const [active, setActive] = useState('setSearch');
   const [term, setTerm] = useState('');
   const search = async (searchTerm) => {
     const results =  await fetch(`/sets/search/${searchTerm}`);
@@ -32,7 +31,7 @@ const SetSearch = () => {
 
    return (
     <CustomProvider theme="dark">
-      <NavigationBar active={active} setActive={setActive} />
+      <NavigationBar />
       <Content style={{ marginTop: "15px" }}>
         <InputGroup styles={styles}>
           <SearchBar term={term} retrieve={search} setTerm={setTerm} onSelect={goToSet} placeholder={'Enter a Set Name. Minimum 3 characters to search'} />

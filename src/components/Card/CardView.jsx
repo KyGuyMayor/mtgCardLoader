@@ -93,7 +93,6 @@ const getLoyalty = (card, faceIndex = 0) => {
 const CardView = () => {
   const {id} = useParams();
   const [card, setCard] =  useState();
-  const [active, setActive] = useState('cardSearch');
   const [activeFace, setActiveFace] = useState(0);
 
   const toggleFace = () => {
@@ -113,7 +112,7 @@ const CardView = () => {
   return (
     <CustomProvider theme="dark">
       <Container>
-        <NavigationBar active={active} setActive={setActive} />
+        <NavigationBar />
           <Content style={{ marginTop: "15px" }}>
             <FlexboxGrid justify="center" align="top">
               <FlexboxGrid.Item colspan={isMobile ? 20 : 14} style={{ paddingRight: isMobile ? "0px" : "10px" }}>

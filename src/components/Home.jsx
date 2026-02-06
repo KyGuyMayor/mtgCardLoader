@@ -9,7 +9,6 @@ import ViewCard from './Shared/Card/ViewCard';
  * @returns React Component
  */
 const Home = () => {
-  const [active, setActive] = useState('home');
   const [randomCard, setRandomCard] = useState(null);
 
   useEffect(() => {
@@ -24,7 +23,7 @@ const Home = () => {
 
   return (
     <CustomProvider theme="dark">
-      <NavigationBar active={active} setActive={setActive} />
+      <NavigationBar />
       <div>Welcome to MTG Card Loader</div>
       {randomCard && <ViewCard card={randomCard} />}
     </CustomProvider>

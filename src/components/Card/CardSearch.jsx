@@ -9,7 +9,6 @@ import SearchBar from '../Shared/SearchBar';
  * @returns React Component
  */
 const CardSearch = () => {
-  const [active, setActive] = useState('cardSearch');
   const [term, setTerm] = useState('');
   const search = async (searchTerm) => {
     const results =  await fetch(`/cards/search/${searchTerm}`);
@@ -32,7 +31,7 @@ const CardSearch = () => {
 
   return (
     <CustomProvider theme="dark">
-      <NavigationBar active={active} setActive={setActive} />
+      <NavigationBar />
       <Container>
         <Heading align="center" level={3}>Card Search</Heading>
         <Content style={{ marginTop: "15px" }}>
