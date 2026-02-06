@@ -5,3 +5,7 @@ export { default as SetSearch } from "./Set/SetSearch";
 export { default as SetView } from "./Set/SetView";
 export { default as NavigationBar } from "./Shared/NavigationBar";
 export { default as SearchBar } from "./Shared/SearchBar";
+export { default as Login } from "./Auth/Login";
+export { default as Register } from "./Auth/Register";
+export { AuthProvider, useAuth } from "./Auth/AuthContext";
+export { default as ProtectedRoute } from "./Auth/ProtectedRoute";

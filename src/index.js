@@ -5,17 +5,22 @@ import reportWebVitals from './reportWebVitals';
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import 'rsuite/dist/rsuite.min.css';
 
-import { Home, CardSearch, CardView, SetSearch, SetView } from './components';
+import { Home, CardSearch, CardView, SetSearch, SetView, Login, Register } from './components';
+import { AuthProvider } from './components/Auth/AuthContext';
 
 ReactDOM.render(
   <Router>
-    <Routes>
-      <Route path="/" element={<Home />} />
-      <Route path="/cardsearch" element={<CardSearch />} />
-      <Route path="/cardsearch/:id" element={<CardView />} />
-      <Route path="/setsearch" element={<SetSearch />} />
-      <Route path="/set/:id" element={<SetView />} />
-    </Routes>
+    <AuthProvider>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/cardsearch" element={<CardSearch />} />
+        <Route path="/cardsearch/:id" element={<CardView />} />
+        <Route path="/setsearch" element={<SetSearch />} />
+        <Route path="/set/:id" element={<SetView />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+      </Routes>
+    </AuthProvider>
   </Router>,
   document.getElementById('root')
 );
