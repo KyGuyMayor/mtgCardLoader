@@ -1,32 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { CheckboxGroup, Checkbox, FlexboxGrid, Input, Button, CheckPicker } from 'rsuite';
-
-const COLOR_OPTIONS = [
-  { value: 'W', label: 'White' },
-  { value: 'U', label: 'Blue' },
-  { value: 'B', label: 'Black' },
-  { value: 'R', label: 'Red' },
-  { value: 'G', label: 'Green' },
-  { value: 'C', label: 'Colorless' },
-  { value: 'M', label: 'Multicolor' }
-];
-
-const RARITY_OPTIONS = [
-  { value: 'common', label: 'Common' },
-  { value: 'uncommon', label: 'Uncommon' },
-  { value: 'rare', label: 'Rare' },
-  { value: 'mythic', label: 'Mythic' }
-];
-
-const TYPE_OPTIONS = [
-  { value: 'Creature', label: 'Creature' },
-  { value: 'Instant', label: 'Instant' },
-  { value: 'Sorcery', label: 'Sorcery' },
-  { value: 'Enchantment', label: 'Enchantment' },
-  { value: 'Artifact', label: 'Artifact' },
-  { value: 'Land', label: 'Land' },
-  { value: 'Planeswalker', label: 'Planeswalker' }
-];
+import { COLOR_OPTIONS, RARITY_OPTIONS, TYPE_OPTIONS } from '../../helpers/filterConstants';
+import useDebouncedSearch from '../../helpers/useDebouncedSearch';
 
 const SetFilters = ({
   nameSearch,
@@ -41,18 +16,7 @@ const SetFilters = ({
   totalCards,
   filteredCount
 }) => {
-  const [searchInput, setSearchInput] = useState(nameSearch);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setNameSearch(searchInput);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchInput, setNameSearch]);
-
-  useEffect(() => {
-    setSearchInput(nameSearch);
-  }, [nameSearch]);
+  const [searchInput, setSearchInput] = useDebouncedSearch(nameSearch, setNameSearch);
 
   const hasActiveFilters = nameSearch || colorFilter.length > 0 || rarityFilter.length > 0 || typeFilter.length > 0;
 

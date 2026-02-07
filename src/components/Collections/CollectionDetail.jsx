@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { isMobile } from 'react-device-detect';
 import {
@@ -9,9 +9,14 @@ import {
   Loader,
   Message,
   Badge,
+  Button,
+  Modal,
+  useToaster,
 } from 'rsuite';
 
 import NavigationBar from '../Shared/NavigationBar';
+import EditEntryModal from './EditEntryModal';
+import CollectionFilters from './CollectionFilters';
 import authFetch from '../../helpers/authFetch';
 
 const { Column, HeaderCell, Cell } = Table;
@@ -53,22 +58,38 @@ const GainLossCell = ({ rowData, ...props }) => {
   );
 };
 
+const RARITY_ORDER = {
+  'common': 0,
+  'uncommon': 1,
+  'rare': 2,
+  'mythic': 3,
+};
+
+const CONDITION_ORDER = {
+  'MINT': 0,
+  'NM': 1,
+  'LP': 2,
+  'MP': 3,
+  'HP': 4,
+  'DAMAGED': 5,
+};
+
 const defaultColumns = [
-  { key: 'name', label: 'Name', fixed: true, flexGrow: 2 },
-  { key: 'type_line', label: 'Type', flexGrow: 1 },
+  { key: 'name', label: 'Name', fixed: true, flexGrow: 2, sortable: true },
+  { key: 'type_line', label: 'Type', flexGrow: 1, sortable: true },
 ];
 
 const desktopColumns = [
-  { key: 'rarity', label: 'Rarity', flexGrow: 1 },
+  { key: 'rarity', label: 'Rarity', flexGrow: 1, sortable: true },
   { key: 'colors', label: 'Colors', flexGrow: 1 },
   { key: 'set_name', label: 'Set', flexGrow: 1 },
-  { key: 'purchase_price_display', label: 'Purchase Price', flexGrow: 1 },
-  { key: 'current_price', label: 'Current Price', flexGrow: 1 },
+  { key: 'purchase_price_display', label: 'Purchase Price', flexGrow: 1, sortable: true, sortKey: 'purchase_price_raw' },
+  { key: 'current_price', label: 'Current Price', flexGrow: 1, sortable: true, sortKey: 'current_price_raw' },
   { key: 'gain_loss', label: 'Gain/Loss', flexGrow: 1, custom: true },
-  { key: 'condition', label: 'Condition', flexGrow: 1 },
+  { key: 'condition', label: 'Condition', flexGrow: 1, sortable: true },
 ];
 
-const quantityColumn = { key: 'quantity', label: 'Quantity', width: 90 };
+const quantityColumn = { key: 'quantity', label: 'Quantity', width: 90, sortable: true };
 
 const CollectionDetail = () => {
   const { id } = useParams();
@@ -79,7 +100,20 @@ const CollectionDetail = () => {
   const [cardLoading, setCardLoading] = useState(false);
   const [priceLoading, setPriceLoading] = useState(false);
   const [error, setError] = useState('');
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editEntry, setEditEntry] = useState(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteEntry, setDeleteEntry] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [nameSearch, setNameSearch] = useState('');
+  const [colorFilter, setColorFilter] = useState([]);
+  const [rarityFilter, setRarityFilter] = useState([]);
+  const [conditionFilter, setConditionFilter] = useState([]);
+  const [sortColumn, setSortColumn] = useState(null);
+  const [sortType, setSortType] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const priceCacheRef = useRef({});
+  const toaster = useToaster();
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -159,12 +193,14 @@ const CollectionDetail = () => {
             const gainLossRaw = (purchaseRaw != null && currentRaw != null)
               ? currentRaw - purchaseRaw
               : null;
+            const rawColors = card?.colors || [];
             return {
               ...entry,
               name: card?.name || 'Unknown Card',
               type_line: card?.type_line || '',
               rarity: card?.rarity || '',
-              colors: (card?.colors || []).join(', ') || 'Colorless',
+              colors_raw: rawColors,
+              colors: rawColors.join(', ') || 'Colorless',
               set_name: card?.set_name || '',
               purchase_price_display: purchaseRaw != null
                 ? `$${purchaseRaw.toFixed(2)}`
@@ -188,7 +224,108 @@ const CollectionDetail = () => {
     };
 
     fetchCollection();
-  }, [id]);
+  }, [id, refreshKey]);
+
+  const filteredData = useMemo(() => {
+    let data = tableData;
+
+    if (nameSearch) {
+      const term = nameSearch.toLowerCase();
+      data = data.filter((row) => row.name.toLowerCase().includes(term));
+    }
+
+    if (colorFilter.length > 0) {
+      data = data.filter((row) => {
+        const raw = row.colors_raw || [];
+        return colorFilter.some((f) => {
+          if (f === 'C') return raw.length === 0;
+          if (f === 'M') return raw.length > 1;
+          return raw.includes(f);
+        });
+      });
+    }
+
+    if (rarityFilter.length > 0) {
+      data = data.filter((row) => rarityFilter.includes(row.rarity));
+    }
+
+    if (conditionFilter.length > 0) {
+      data = data.filter((row) => conditionFilter.includes(row.condition));
+    }
+
+    return data;
+  }, [tableData, nameSearch, colorFilter, rarityFilter, conditionFilter]);
+
+  const allColumns = useMemo(() => (
+    isMobile
+      ? [...defaultColumns, quantityColumn]
+      : [...defaultColumns, ...desktopColumns, quantityColumn]
+  ), []);
+
+  const handleSortColumn = (dataKey) => {
+    const colDef = allColumns.find((c) => c.key === dataKey);
+    const resolvedKey = colDef?.sortKey || dataKey;
+
+    if (sortColumn === resolvedKey) {
+      if (sortType === 'asc') {
+        setSortType('desc');
+      } else if (sortType === 'desc') {
+        setSortColumn(null);
+        setSortType(null);
+      } else {
+        setSortType('asc');
+      }
+    } else {
+      setSortColumn(resolvedKey);
+      setSortType('asc');
+    }
+  };
+
+  const sortedData = useMemo(() => {
+    if (!sortColumn || !sortType) return filteredData;
+
+    return [...filteredData].sort((a, b) => {
+      const aVal = a[sortColumn];
+      const bVal = b[sortColumn];
+
+      if (sortColumn === 'rarity') {
+        const aRank = RARITY_ORDER[(aVal || '').toLowerCase()] ?? 99;
+        const bRank = RARITY_ORDER[(bVal || '').toLowerCase()] ?? 99;
+        return sortType === 'asc' ? aRank - bRank : bRank - aRank;
+      }
+
+      if (sortColumn === 'condition') {
+        const aRank = CONDITION_ORDER[aVal] ?? 99;
+        const bRank = CONDITION_ORDER[bVal] ?? 99;
+        return sortType === 'asc' ? aRank - bRank : bRank - aRank;
+      }
+
+      if (typeof aVal === 'number' || typeof bVal === 'number') {
+        const an = aVal ?? -Infinity;
+        const bn = bVal ?? -Infinity;
+        return sortType === 'asc' ? an - bn : bn - an;
+      }
+
+      const as = (aVal || '').toString();
+      const bs = (bVal || '').toString();
+      return sortType === 'asc' ? as.localeCompare(bs) : bs.localeCompare(as);
+    });
+  }, [filteredData, sortColumn, sortType]);
+
+  const displaySortColumn = useMemo(() => {
+    if (!sortColumn) return null;
+    const col = allColumns.find((c) => (c.sortKey || c.key) === sortColumn);
+    return col ? col.key : sortColumn;
+  }, [sortColumn, allColumns]);
+
+  const handleClearFilters = () => {
+    setNameSearch('');
+    setColorFilter([]);
+    setRarityFilter([]);
+    setConditionFilter([]);
+    setSortColumn(null);
+    setSortType(null);
+  };
 
   const handleRowClick = (rowData) => {
     if (rowData.scryfall_id) {
@@ -196,9 +333,94 @@ const CollectionDetail = () => {
     }
   };
 
-  const columns = isMobile
-    ? [...defaultColumns, quantityColumn]
-    : [...defaultColumns, ...desktopColumns, quantityColumn];
+  const handleEdit = (rowData, e) => {
+    e.stopPropagation();
+    setEditEntry(rowData);
+    setEditModalOpen(true);
+  };
+
+  const handleEditClose = () => {
+    setEditModalOpen(false);
+    setEditEntry(null);
+  };
+
+  const handleEntryUpdated = () => {
+    setRefreshKey((k) => k + 1);
+  };
+
+  const handleDeleteClick = (rowData, e) => {
+    e.stopPropagation();
+    setDeleteEntry(rowData);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteClose = () => {
+    setDeleteModalOpen(false);
+    setDeleteEntry(null);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteEntry) return;
+    setDeleting(true);
+    try {
+      const response = await authFetch(
+        `/collections/${id}/entries/${deleteEntry.id}`,
+        { method: 'DELETE' }
+      );
+      if (response.ok || response.status === 204) {
+        toaster.push(
+          <Message type="success" showIcon closable>
+            <strong>{deleteEntry.name}</strong> removed from collection
+          </Message>,
+          { placement: 'topCenter', duration: 3000 }
+        );
+        handleDeleteClose();
+        setRefreshKey((k) => k + 1);
+      } else {
+        const data = await response.json();
+        toaster.push(
+          <Message type="error" showIcon closable>
+            {data.error || 'Failed to delete entry'}
+          </Message>,
+          { placement: 'topCenter', duration: 4000 }
+        );
+      }
+    } catch (err) {
+      toaster.push(
+        <Message type="error" showIcon closable>
+          Unable to connect to server
+        </Message>,
+        { placement: 'topCenter', duration: 4000 }
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const ActionsCell = ({ rowData, ...props }) => (
+    <Cell {...props} style={{ padding: '6px 0' }}>
+      <Button
+        size="xs"
+        appearance="ghost"
+        onClick={(e) => handleEdit(rowData, e)}
+      >
+        Edit
+      </Button>
+      <Button
+        size="xs"
+        appearance="ghost"
+        color="red"
+        onClick={(e) => handleDeleteClick(rowData, e)}
+        style={{ marginLeft: 4 }}
+      >
+        Del
+      </Button>
+    </Cell>
+  );
+
+  const actionsColumn = { key: 'actions', label: '', width: 120, custom: 'actions' };
+
+  const columns = [...allColumns, actionsColumn];
 
   const typeBadge = (type) => (
     <span
@@ -291,6 +513,22 @@ const CollectionDetail = () => {
               })()}
             </div>
 
+            {tableData.length > 0 && (
+              <CollectionFilters
+                nameSearch={nameSearch}
+                setNameSearch={setNameSearch}
+                colorFilter={colorFilter}
+                setColorFilter={setColorFilter}
+                rarityFilter={rarityFilter}
+                setRarityFilter={setRarityFilter}
+                conditionFilter={conditionFilter}
+                setConditionFilter={setConditionFilter}
+                onClearFilters={handleClearFilters}
+                totalCount={tableData.length}
+                filteredCount={sortedData.length}
+              />
+            )}
+
             {tableData.length === 0 && !cardLoading ? (
               <div style={{ textAlign: 'center', padding: `${SPACING.emptyPadding}px 0`, color: COLORS.muted }}>
                 <p style={{ fontSize: 18, marginBottom: 8 }}>No cards in this collection</p>
@@ -299,20 +537,53 @@ const CollectionDetail = () => {
             ) : (
               <Table
                 loading={cardLoading}
-                data={tableData}
+                data={sortedData}
                 height={window.innerHeight - 250}
                 onRowClick={handleRowClick}
                 virtualized
                 rowHeight={46}
+                sortColumn={displaySortColumn}
+                sortType={sortType}
+                onSortColumn={handleSortColumn}
               >
                 {columns.map(({ key, label, custom, ...rest }) => (
                   <Column {...rest} key={key}>
                     <HeaderCell>{label}</HeaderCell>
-                    {custom ? <GainLossCell dataKey={key} /> : <Cell dataKey={key} />}
+                    {custom === 'actions'
+                      ? <ActionsCell dataKey={key} />
+                      : custom
+                        ? <GainLossCell dataKey={key} />
+                        : <Cell dataKey={key} />}
                   </Column>
                 ))}
               </Table>
             )}
+
+            <EditEntryModal
+              open={editModalOpen}
+              onClose={handleEditClose}
+              entry={editEntry}
+              collectionId={id}
+              onUpdated={handleEntryUpdated}
+            />
+
+            <Modal open={deleteModalOpen} onClose={handleDeleteClose} size="xs">
+              <Modal.Header>
+                <Modal.Title>Delete Entry</Modal.Title>
+              </Modal.Header>
+              <Modal.Body>
+                Are you sure you want to remove{' '}
+                <strong>{deleteEntry?.name}</strong> from <strong>{collection?.name}</strong>?
+              </Modal.Body>
+              <Modal.Footer>
+                <Button onClick={handleDeleteClose} appearance="subtle">
+                  Cancel
+                </Button>
+                <Button onClick={handleDeleteConfirm} appearance="primary" color="red" loading={deleting}>
+                  Delete
+                </Button>
+              </Modal.Footer>
+            </Modal>
           </div>
         </Content>
       </Container>

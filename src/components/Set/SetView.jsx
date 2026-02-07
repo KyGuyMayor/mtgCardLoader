@@ -189,7 +189,7 @@ const SetView = () => {
             filteredCount={sortedData.length}
           />
           <Table
-            loading={set?.length == 0}
+            loading={set?.length === 0}
             data={sortedData}
             height={window.innerHeight - 100}
             onRowClick={handleClick}
