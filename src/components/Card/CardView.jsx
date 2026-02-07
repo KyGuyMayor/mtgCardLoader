@@ -13,6 +13,8 @@ import {
 import CardStat from './CardStat';
 import Link from '../Shared/Link';
 import NavigationBar from '../Shared/NavigationBar';
+import AddToCollectionModal from '../Collections/AddToCollectionModal';
+import { useAuth } from '../Auth/AuthContext';
 
 /**
  * Check if a card is double-faced (transform, modal DFC, etc.)
@@ -94,6 +96,8 @@ const CardView = () => {
   const {id} = useParams();
   const [card, setCard] =  useState();
   const [activeFace, setActiveFace] = useState(0);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const { isAuthenticated } = useAuth();
 
   const toggleFace = () => {
     setActiveFace(prev => prev === 0 ? 1 : 0);
@@ -138,6 +142,17 @@ const CardView = () => {
                   <h5 style={{marginTop: "25px"}}>Purchase Links</h5>
                   <Link url={card?.purchase_uris?.tcgplayer} title="TCG Player" />
                   <Link url={card?.purchase_uris?.cardmarket} title="Card Market" />
+                  {isAuthenticated && (
+                    <Button
+                      appearance="primary"
+                      color="green"
+                      block
+                      style={{ marginTop: 20 }}
+                      onClick={() => setShowAddModal(true)}
+                    >
+                      Add to Collection
+                    </Button>
+                  )}
                 </Panel>
               </FlexboxGrid.Item>
               
@@ -160,6 +175,14 @@ const CardView = () => {
               </FlexboxGrid.Item>
             }
           </FlexboxGrid>
+          {isAuthenticated && card && (
+            <AddToCollectionModal
+              open={showAddModal}
+              onClose={() => setShowAddModal(false)}
+              scryfallId={card.id}
+              cardName={card.name}
+            />
+          )}
         </Content>
       </Container>
     </CustomProvider>

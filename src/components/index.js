@@ -10,3 +10,4 @@ export { default as Register } from "./Auth/Register";
 export { AuthProvider, useAuth } from "./Auth/AuthContext";
 export { default as ProtectedRoute } from "./Auth/ProtectedRoute";
 export { default as CollectionsDashboard } from "./Collections/Dashboard";
+export { default as CollectionDetail } from "./Collections/CollectionDetail";
