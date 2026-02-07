@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 
 const AuthContext = createContext(null);
 
@@ -19,20 +19,18 @@ const decodeToken = (token) => {
   }
 };
 
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+const getInitialUser = () => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    const decoded = decodeToken(token);
+    if (decoded) return decoded;
+    localStorage.removeItem('token');
+  }
+  return null;
+};
 
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      const decoded = decodeToken(token);
-      if (decoded) {
-        setUser(decoded);
-      } else {
-        localStorage.removeItem('token');
-      }
-    }
-  }, []);
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(getInitialUser);
 
   const login = (token) => {
     localStorage.setItem('token', token);

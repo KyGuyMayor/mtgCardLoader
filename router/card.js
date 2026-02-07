@@ -5,6 +5,8 @@ const cardController = require('../controllers/cardController');
 
 router.get('/', cardController.index);
 
+router.post('/collection', cardController.collection);
+
 router.get('/:id', cardController.get);
 
 router.get('/search/:query', cardController.find);

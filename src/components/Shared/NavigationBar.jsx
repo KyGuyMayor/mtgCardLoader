@@ -35,13 +35,13 @@ const NavigationBar = () => {
   return (
     <Header>
       <Navbar appearance="inverse">
-        <Navbar.Brand href="/">MTG Card Loader</Navbar.Brand>
+        <Navbar.Brand onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>MTG Card Loader</Navbar.Brand>
         <Nav activeKey={active}>
-          <Nav.Item href="/" eventKey="home">Home</Nav.Item>
-          <Nav.Item href="/cardsearch" eventKey="cardSearch">Card Search</Nav.Item>
-          <Nav.Item href="/setsearch" eventKey="setSearch">Set Search</Nav.Item>
+          <Nav.Item eventKey="home" onSelect={() => navigate('/')}>Home</Nav.Item>
+          <Nav.Item eventKey="cardSearch" onSelect={() => navigate('/cardsearch')}>Card Search</Nav.Item>
+          <Nav.Item eventKey="setSearch" onSelect={() => navigate('/setsearch')}>Set Search</Nav.Item>
           {isAuthenticated && (
-            <Nav.Item href="/collections" eventKey="myCollection">My Collection</Nav.Item>
+            <Nav.Item eventKey="myCollection" onSelect={() => navigate('/collections')}>My Collection</Nav.Item>
           )}
         </Nav>
         {!isMobile && <Nav pullRight>
@@ -49,8 +49,8 @@ const NavigationBar = () => {
             <Nav.Item eventKey="logout" onSelect={handleLogout}>Logout</Nav.Item>
           ) : (
             <>
-              <Nav.Item href="/login" eventKey="login">Login</Nav.Item>
-              <Nav.Item href="/register" eventKey="register">Register</Nav.Item>
+              <Nav.Item eventKey="login" onSelect={() => navigate('/login')}>Login</Nav.Item>
+              <Nav.Item eventKey="register" onSelect={() => navigate('/register')}>Register</Nav.Item>
             </>
           )}
         </Nav>}

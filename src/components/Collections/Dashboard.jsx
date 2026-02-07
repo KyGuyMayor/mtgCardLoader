@@ -15,6 +15,7 @@ import { useNavigate } from 'react-router-dom';
 import { isMobile } from 'react-device-detect';
 
 import NavigationBar from '../Shared/NavigationBar';
+import CreateCollectionModal from './CreateCollectionModal';
 import authFetch from '../../helpers/authFetch';
 
 const BADGE_COLORS = {
@@ -59,6 +60,7 @@ const Dashboard = () => {
   const [error, setError] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   const navigate = useNavigate();
 
@@ -168,7 +170,7 @@ const Dashboard = () => {
               <Button
                 appearance="primary"
                 block={isMobile}
-                onClick={() => navigate('/collections/new')}
+                onClick={() => setShowCreateModal(true)}
               >
                 Create New Collection
               </Button>
@@ -249,6 +251,12 @@ const Dashboard = () => {
               </FlexboxGrid>
             )}
           </div>
+
+          <CreateCollectionModal
+            open={showCreateModal}
+            onClose={() => setShowCreateModal(false)}
+            onCreated={fetchCollections}
+          />
 
           <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} size="xs">
             <Modal.Header>
