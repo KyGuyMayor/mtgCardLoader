@@ -116,9 +116,6 @@ const CollectionDetail = () => {
           // batch fetch failed
         }
 
-        if (chunks.length > 1) {
-          await new Promise((r) => setTimeout(r, 100));
-        }
       }
     }
 

@@ -29,11 +29,11 @@ const isDoubleFaced = (card) => card?.card_faces && !card?.image_uris;
  * @returns {string|null} The image URI or null
  */
 const getImageUri = (card, faceIndex = 0) => {
-  if (card?.image_uris?.png) {
-    return card.image_uris.png;
+  if (card?.image_uris?.normal) {
+    return card.image_uris.normal;
   }
-  if (card?.card_faces?.[faceIndex]?.image_uris?.png) {
-    return card.card_faces[faceIndex].image_uris.png;
+  if (card?.card_faces?.[faceIndex]?.image_uris?.normal) {
+    return card.card_faces[faceIndex].image_uris.normal;
   }
   return null;
 };
@@ -113,6 +113,17 @@ const CardView = () => {
     fetchData();
   }, [id]);
 
+  useEffect(() => {
+    if (isDoubleFaced(card)) {
+      const otherFace = activeFace === 0 ? 1 : 0;
+      const otherUri = getImageUri(card, otherFace);
+      if (otherUri) {
+        const img = new Image();
+        img.src = otherUri;
+      }
+    }
+  }, [card, activeFace]);
+
   return (
     <CustomProvider theme="dark">
       <Container>
@@ -161,7 +172,9 @@ const CardView = () => {
                 <img
                   src={getImageUri(card, activeFace)}
                   alt={card?.name || 'Card image'}
+                  width="340"
                   height="475"
+                  decoding="async"
                 />
                 {isDoubleFaced(card) && (
                   <Button 

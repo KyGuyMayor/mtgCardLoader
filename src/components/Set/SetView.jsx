@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { isMobile } from 'react-device-detect';
 import {
   CustomProvider,
@@ -22,6 +22,7 @@ const RARITY_ORDER = {
 
 const SetView = () => {
   const {id} = useParams();
+  const navigate = useNavigate();
   const [set, setSet] =  useState([]);
   const [sortColumn, setSortColumn] = useState(null);
   const [sortType, setSortType] = useState(null);
@@ -77,7 +78,7 @@ const SetView = () => {
     } 
      
     fetchData();
-  }, []);
+  }, [id]);
 
   const handleSortColumn = (dataKey, newSortType) => {
     if (sortColumn === dataKey) {
@@ -155,7 +156,7 @@ const SetView = () => {
   }, [filteredData, sortColumn, sortType]);
 
   const handleClick = (rowObject) => {
-    window.location.assign(`/cardsearch/${rowObject.id}`);
+    navigate(`/cardsearch/${rowObject.id}`);
   }
 
   const handleClearFilters = () => {

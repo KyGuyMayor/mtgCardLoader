@@ -1,6 +1,9 @@
 const scry = require('scryfall-sdk');
 const { rateLimitedRequest, RateLimitTimeoutError } = require('../src/helpers/rateLimiter');
 const https = require('https');
+const ttlCache = require('../src/helpers/ttlCache');
+
+const keepAliveAgent = new https.Agent({ keepAlive: true });
 
 /**
  * Handles timeout errors by returning 503 status.
@@ -36,8 +39,17 @@ exports.index = async (req, res) => {
 
 exports.get = async (req, res) => {
   try {
+    const cacheKey = `card:${req.params.id}`;
+    const cached = ttlCache.get(cacheKey);
+    if (cached) {
+      res.set('Cache-Control', 'public, max-age=3600');
+      return res.send(cached);
+    }
+
     const card = await rateLimitedRequest(() => scry.Cards.byId(req.params.id));
 
+    ttlCache.set(cacheKey, card, 3600000);
+    res.set('Cache-Control', 'public, max-age=3600');
     res.send(card);
   } catch (e) {
     if (handleTimeoutError(e, res)) return;
@@ -48,10 +60,11 @@ exports.get = async (req, res) => {
 exports.find = async (req, res) => {
   try {
     const cards = await rateLimitedRequest(() => 
-      scry.Cards.search('name:' + req.params.query).waitForAll()
+      scry.Cards.search('name:' + req.params.query).cancelAfterPage().waitForAll()
     );
 
-    return res.send(JSON.stringify(cards));
+    res.set('Cache-Control', 'public, max-age=300');
+    return res.json(cards);
   } catch (e) {
     if (handleTimeoutError(e, res)) return;
     return res.status(500).json({ error: 'Internal Server Error', message: e.message });
@@ -94,6 +107,7 @@ exports.collection = async (req, res) => {
             'Accept': 'application/json',
             'User-Agent': 'MTGCardLoader/1.0',
           },
+          agent: keepAliveAgent,
         };
 
         const request = https.request(options, (response) => {
