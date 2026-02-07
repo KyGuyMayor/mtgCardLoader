@@ -46,7 +46,7 @@ const ViewCard = ({ card }) => {
           </FlexboxGrid.Item>
           <FlexboxGrid.Item colspan={6}>
             <h3>Card Image</h3>
-            {imageUri && <img src={imageUri} alt={card.name} />}
+            {imageUri && <img src={imageUri} alt={card.name} loading="lazy" decoding="async" width="244" height="340" />}
           </FlexboxGrid.Item>
         </Panel>
       </FlexboxGrid>

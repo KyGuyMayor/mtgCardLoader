@@ -1,6 +1,7 @@
 const scry = require('scryfall-sdk');
 const fuzzysort = require('fuzzysort');
 const { rateLimitedRequest, RateLimitTimeoutError } = require('../src/helpers/rateLimiter');
+const ttlCache = require('../src/helpers/ttlCache');
 
 /**
  * Handles timeout errors by returning 503 status.
@@ -59,9 +60,18 @@ exports.find = async (req, res) => {
  */
 exports.get = async (req, res) => {
   try {
+    const cacheKey = `set:${req.params.id}`;
+    const cached = ttlCache.get(cacheKey);
+    if (cached) {
+      res.set('Cache-Control', 'public, max-age=21600');
+      return res.send(cached);
+    }
+
     const set = await rateLimitedRequest(() => scry.Sets.byId(req.params.id));
     set.cards = await rateLimitedRequest(() => set.getCards());
 
+    ttlCache.set(cacheKey, set, 21600000);
+    res.set('Cache-Control', 'public, max-age=21600');
     return res.send(set);
   } catch (e) {
     if (handleTimeoutError(e, res)) return;
@@ -77,8 +87,16 @@ exports.get = async (req, res) => {
  */
 exports.index = async (req, res) => {
   try {
+    const cached = ttlCache.get('sets:all');
+    if (cached) {
+      res.set('Cache-Control', 'public, max-age=86400');
+      return res.send(cached);
+    }
+
     const sets = await rateLimitedRequest(() => scry.Sets.all());
 
+    ttlCache.set('sets:all', sets, 86400000);
+    res.set('Cache-Control', 'public, max-age=86400');
     return res.send(sets);
   } catch (e) {
     if (handleTimeoutError(e, res)) return;
