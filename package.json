@@ -36,7 +36,7 @@
     "webpack-cli": "^4.9.2"
   },
   "scripts": {
-    "start": "react-app-rewired start webpack serve --mode development",
+    "start": "PORT=3000 react-app-rewired start webpack serve --mode development",
     "server": "node server.js",
     "build": "react-app-rewired build",
     "test": "jest",

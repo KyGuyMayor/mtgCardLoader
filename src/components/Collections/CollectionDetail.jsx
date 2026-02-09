@@ -17,6 +17,7 @@ import {
 import NavigationBar from '../Shared/NavigationBar';
 import EditEntryModal from './EditEntryModal';
 import CollectionFilters from './CollectionFilters';
+import ExportCSVModal from './ExportCSVModal';
 import authFetch from '../../helpers/authFetch';
 
 const { Column, HeaderCell, Cell } = Table;
@@ -112,6 +113,7 @@ const CollectionDetail = () => {
   const [sortColumn, setSortColumn] = useState(null);
   const [sortType, setSortType] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
   const priceCacheRef = useRef({});
   const toaster = useToaster();
   const isMountedRef = useRef(true);
@@ -490,6 +492,15 @@ const CollectionDetail = () => {
                 <Badge content={`${collection.entries?.length || 0} entries`} />
                 <Badge content={`${(collection.entries || []).reduce((sum, e) => sum + (e.quantity || 0), 0)} total cards`} />
                 {priceLoading && <Loader size="xs" content="Fetching prices..." />}
+                {tableData.length > 0 && (
+                  <Button
+                    size="xs"
+                    appearance="ghost"
+                    onClick={() => setExportModalOpen(true)}
+                  >
+                    Export CSV
+                  </Button>
+                )}
               </div>
               {tableData.length > 0 && !priceLoading && (() => {
                 const withPurchase = tableData.filter((r) => r.purchase_price_raw != null);
@@ -584,6 +595,13 @@ const CollectionDetail = () => {
                 </Button>
               </Modal.Footer>
             </Modal>
+
+            <ExportCSVModal
+              open={exportModalOpen}
+              onClose={() => setExportModalOpen(false)}
+              collectionName={collection?.name}
+              entries={tableData}
+            />
           </div>
         </Content>
       </Container>

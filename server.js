@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express'); //Line 1
 const app = express(); //Line 2
-const port = process.env.PORT || 5000; //Line 3
+const port = process.env.SERVER_PORT || process.env.PORT || 5000; //Line 3
 const card = require('./router/card');
 const set = require('./router/set');
 const auth = require('./router/auth');

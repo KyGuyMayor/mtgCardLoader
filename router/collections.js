@@ -13,6 +13,7 @@ router.post('/', collectionController.create);
 router.put('/:id', collectionController.update);
 router.delete('/:id', collectionController.remove);
 
+router.post('/:id/entries/bulk', entryController.bulkCreate);
 router.post('/:id/entries', entryController.create);
 router.put('/:id/entries/:entryId', entryController.update);
 router.delete('/:id/entries/:entryId', entryController.remove);

@@ -107,28 +107,83 @@ exports.update = async (req, res) => {
 };
 
 exports.remove = async (req, res) => {
+   const user_id = req.user.id;
+   const { id, entryId } = req.params;
+
+   try {
+     await findCollectionOrFail(id, user_id);
+
+     const entry = await db('collection_entries')
+       .where({ id: entryId, collection_id: id })
+       .first();
+
+     if (!entry) {
+       return res.status(404).json({ error: 'Entry not found' });
+     }
+
+     await db('collection_entries').where({ id: entryId }).del();
+
+     return res.status(204).send();
+   } catch (error) {
+     if (error instanceof CollectionError) {
+       return res.status(error.status).json({ error: error.message });
+     }
+     console.error('Delete entry error:', error.message);
+     return res.status(500).json({ error: 'Internal server error' });
+   }
+};
+
+exports.bulkCreate = async (req, res) => {
   const user_id = req.user.id;
-  const { id, entryId } = req.params;
+  const { id } = req.params;
+  const { entries } = req.body;
+
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return res.status(400).json({ error: 'entries array is required and must not be empty' });
+  }
+
+  if (entries.length > 500) {
+    return res.status(400).json({ error: 'Maximum 500 entries per request' });
+  }
 
   try {
     await findCollectionOrFail(id, user_id);
 
-    const entry = await db('collection_entries')
-      .where({ id: entryId, collection_id: id })
-      .first();
-
-    if (!entry) {
-      return res.status(404).json({ error: 'Entry not found' });
+    // Validate all entries before inserting
+    for (const entry of entries) {
+      if (!entry.scryfall_id) {
+        return res.status(400).json({ error: 'All entries must have scryfall_id' });
+      }
+      if (entry.condition && !VALID_CONDITIONS.includes(entry.condition)) {
+        return res.status(400).json({ error: `condition must be one of: ${VALID_CONDITIONS.join(', ')}` });
+      }
     }
 
-    await db('collection_entries').where({ id: entryId }).del();
+    // Prepare entries for insertion
+    const entriesToInsert = entries.map((entry) => ({
+      collection_id: id,
+      scryfall_id: entry.scryfall_id,
+      quantity: entry.quantity || 1,
+      condition: entry.condition || 'NM',
+      purchase_price: entry.purchase_price || null,
+      notes: entry.notes || null,
+      is_commander: entry.is_commander || false,
+      is_sideboard: entry.is_sideboard || false,
+      created_at: db.fn.now(),
+      updated_at: db.fn.now(),
+    }));
 
-    return res.status(204).send();
+    // Bulk insert
+    const inserted = await db('collection_entries')
+      .insert(entriesToInsert)
+      .returning(['id', 'collection_id', 'scryfall_id', 'quantity', 'condition', 'purchase_price', 'notes', 'is_commander', 'is_sideboard', 'created_at', 'updated_at']);
+
+    return res.status(201).json({ imported: inserted.length, entries: inserted });
   } catch (error) {
     if (error instanceof CollectionError) {
       return res.status(error.status).json({ error: error.message });
     }
-    console.error('Delete entry error:', error.message);
+    console.error('Bulk create entries error:', error.message);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
