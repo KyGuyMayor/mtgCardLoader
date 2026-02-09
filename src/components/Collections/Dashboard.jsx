@@ -16,6 +16,7 @@ import { isMobile } from 'react-device-detect';
 
 import NavigationBar from '../Shared/NavigationBar';
 import CreateCollectionModal from './CreateCollectionModal';
+import ImportCSVModal from './ImportCSVModal';
 import authFetch from '../../helpers/authFetch';
 
 const BADGE_COLORS = {
@@ -61,6 +62,7 @@ const Dashboard = () => {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const navigate = useNavigate();
 
@@ -167,13 +169,22 @@ const Dashboard = () => {
           <div style={styles.container}>
             <div style={styles.header}>
               <h3>My Collections</h3>
-              <Button
-                appearance="primary"
-                block={isMobile}
-                onClick={() => setShowCreateModal(true)}
-              >
-                Create New Collection
-              </Button>
+              <div style={{ display: 'flex', gap: 8, flexDirection: isMobile ? 'column' : 'row' }}>
+                <Button
+                  appearance="primary"
+                  block={isMobile}
+                  onClick={() => setShowCreateModal(true)}
+                >
+                  Create New Collection
+                </Button>
+                <Button
+                  appearance="ghost"
+                  block={isMobile}
+                  onClick={() => setShowImportModal(true)}
+                >
+                  Import CSV
+                </Button>
+              </div>
             </div>
 
             {error && (
@@ -256,6 +267,14 @@ const Dashboard = () => {
             open={showCreateModal}
             onClose={() => setShowCreateModal(false)}
             onCreated={fetchCollections}
+          />
+
+          <ImportCSVModal
+            open={showImportModal}
+            onClose={() => setShowImportModal(false)}
+            onImported={(data) => {
+              navigate(`/collections/${data.collectionId}`);
+            }}
           />
 
           <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} size="xs">
