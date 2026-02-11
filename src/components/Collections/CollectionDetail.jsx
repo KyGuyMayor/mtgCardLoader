@@ -129,6 +129,33 @@ const CollectionDetail = () => {
     return () => { isMountedRef.current = false; };
   }, []);
 
+  const enrichEntries = (entries, cards) => entries.map((entry, idx) => {
+    const card = cards[idx];
+    const usdPrice = card?.prices?.usd || card?.prices?.usd_foil || null;
+    const currentRaw = usdPrice ? Number(usdPrice) : null;
+    const purchaseRaw = entry.purchase_price != null ? Number(entry.purchase_price) : null;
+    const gainLossRaw = (purchaseRaw != null && currentRaw != null)
+      ? currentRaw - purchaseRaw
+      : null;
+    const rawColors = card?.colors || [];
+    return {
+      ...entry,
+      name: card?.name || 'Unknown Card',
+      type_line: card?.type_line || '',
+      rarity: card?.rarity || '',
+      colors_raw: rawColors,
+      colors: rawColors.join(', ') || 'Colorless',
+      set_name: card?.set_name || '',
+      purchase_price_display: purchaseRaw != null
+        ? `$${purchaseRaw.toFixed(2)}`
+        : '',
+      current_price: currentRaw != null ? `$${currentRaw.toFixed(2)}` : '',
+      current_price_raw: currentRaw,
+      purchase_price_raw: purchaseRaw,
+      gain_loss_raw: gainLossRaw,
+    };
+  });
+
   const fetchCardsBatch = async (scryfallIds) => {
     const cache = priceCacheRef.current;
     const uncachedIds = scryfallIds.filter((sid) => !cache[sid]);
@@ -225,32 +252,7 @@ const CollectionDetail = () => {
           const cards = await fetchCardsBatch(scryfallIds);
           if (!isMountedRef.current) return;
 
-          const enriched = firstData.entries.map((entry, idx) => {
-            const card = cards[idx];
-            const usdPrice = card?.prices?.usd || card?.prices?.usd_foil || null;
-            const currentRaw = usdPrice ? Number(usdPrice) : null;
-            const purchaseRaw = entry.purchase_price != null ? Number(entry.purchase_price) : null;
-            const gainLossRaw = (purchaseRaw != null && currentRaw != null)
-              ? currentRaw - purchaseRaw
-              : null;
-            const rawColors = card?.colors || [];
-            return {
-              ...entry,
-              name: card?.name || 'Unknown Card',
-              type_line: card?.type_line || '',
-              rarity: card?.rarity || '',
-              colors_raw: rawColors,
-              colors: rawColors.join(', ') || 'Colorless',
-              set_name: card?.set_name || '',
-              purchase_price_display: purchaseRaw != null
-                ? `$${purchaseRaw.toFixed(2)}`
-                : '',
-              current_price: currentRaw != null ? `$${currentRaw.toFixed(2)}` : '',
-              current_price_raw: currentRaw,
-              purchase_price_raw: purchaseRaw,
-              gain_loss_raw: gainLossRaw,
-            };
-          });
+          const enriched = enrichEntries(firstData.entries, cards);
 
           setTableData(enriched);
           if (isMountedRef.current) {
@@ -278,32 +280,7 @@ const CollectionDetail = () => {
                   const pageCards = await fetchCardsBatch(pageIds);
                   if (!isMountedRef.current) break;
 
-                  const pageEnriched = pageData.entries.map((entry, idx) => {
-                    const card = pageCards[idx];
-                    const usdPrice = card?.prices?.usd || card?.prices?.usd_foil || null;
-                    const currentRaw = usdPrice ? Number(usdPrice) : null;
-                    const purchaseRaw = entry.purchase_price != null ? Number(entry.purchase_price) : null;
-                    const gainLossRaw = (purchaseRaw != null && currentRaw != null)
-                      ? currentRaw - purchaseRaw
-                      : null;
-                    const rawColors = card?.colors || [];
-                    return {
-                      ...entry,
-                      name: card?.name || 'Unknown Card',
-                      type_line: card?.type_line || '',
-                      rarity: card?.rarity || '',
-                      colors_raw: rawColors,
-                      colors: rawColors.join(', ') || 'Colorless',
-                      set_name: card?.set_name || '',
-                      purchase_price_display: purchaseRaw != null
-                        ? `$${purchaseRaw.toFixed(2)}`
-                        : '',
-                      current_price: currentRaw != null ? `$${currentRaw.toFixed(2)}` : '',
-                      current_price_raw: currentRaw,
-                      purchase_price_raw: purchaseRaw,
-                      gain_loss_raw: gainLossRaw,
-                    };
-                  });
+                  const pageEnriched = enrichEntries(pageData.entries, pageCards);
 
                   // Append to table data
                   allEnrichedData = allEnrichedData.concat(pageEnriched);
@@ -316,6 +293,14 @@ const CollectionDetail = () => {
               } catch (err) {
                 // Page fetch failed, continue with what we have
                 console.error(`Failed to fetch page ${page}:`, err.message);
+                if (isMountedRef.current) {
+                  toaster.push(
+                    <Message type="warning" showIcon closable>
+                      Failed to load page {page} — showing available data
+                    </Message>,
+                    { placement: 'topCenter', duration: 3000 }
+                  );
+                }
               }
             }
 
@@ -329,7 +314,8 @@ const CollectionDetail = () => {
       } catch (err) {
         if (isMountedRef.current) setError('Unable to connect to server');
       } finally {
-        if (isMountedRef.current) setLoading(false);
+        // Ensure loading is hidden if error occurred before first page was displayed
+        if (isMountedRef.current && loading) setLoading(false);
       }
     };
 
@@ -497,6 +483,44 @@ const CollectionDetail = () => {
     const col = allColumns.find((c) => (c.sortKey || c.key) === sortColumn);
     return col ? col.key : sortColumn;
   }, [sortColumn, allColumns]);
+
+  const priceSummary = useMemo(() => {
+    if (tableData.length === 0) {
+      return {
+        withPurchase: [],
+        totalPurchase: 0,
+        totalCurrent: 0,
+        trackable: [],
+        trackablePurchase: 0,
+        trackableCurrent: 0,
+        totalGainLoss: 0,
+        glColor: COLORS.muted,
+        glPrefix: '',
+      };
+    }
+
+    const withPurchase = tableData.filter((r) => r.purchase_price_raw != null);
+    const totalPurchase = withPurchase.reduce((s, r) => s + r.purchase_price_raw * (r.quantity || 1), 0);
+    const totalCurrent = tableData.reduce((s, r) => s + (r.current_price_raw || 0) * (r.quantity || 1), 0);
+    const trackable = withPurchase.filter((r) => r.current_price_raw != null);
+    const trackablePurchase = trackable.reduce((s, r) => s + r.purchase_price_raw * (r.quantity || 1), 0);
+    const trackableCurrent = trackable.reduce((s, r) => s + r.current_price_raw * (r.quantity || 1), 0);
+    const totalGainLoss = trackableCurrent - trackablePurchase;
+    const glColor = totalGainLoss > 0 ? COLORS.gain : totalGainLoss < 0 ? COLORS.loss : COLORS.muted;
+    const glPrefix = totalGainLoss > 0 ? '+' : '';
+
+    return {
+      withPurchase,
+      totalPurchase,
+      totalCurrent,
+      trackable,
+      trackablePurchase,
+      trackableCurrent,
+      totalGainLoss,
+      glColor,
+      glPrefix,
+    };
+  }, [tableData]);
 
   const handleClearFilters = () => {
     setNameSearch('');
@@ -746,9 +770,9 @@ const CollectionDetail = () => {
             <div style={{ gridColumn: isMobile ? 'auto' : '1 / -1' }}>
               <h5 style={{ marginTop: 0, marginBottom: 12, fontSize: 14 }}>Top 10 Most Valuable</h5>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 250, overflowY: 'auto' }}>
-                {stats.top10MostValuableCards.map((card, idx) => (
+                {stats.top10MostValuableCards.map((card) => (
                   <div
-                    key={idx}
+                    key={card.scryfall_id}
                     style={{
                       display: 'flex',
                       justifyContent: 'space-between',
@@ -825,8 +849,8 @@ const CollectionDetail = () => {
                 </p>
               )}
               <div style={{ display: 'flex', gap: SPACING.statsGap, flexWrap: 'wrap', alignItems: 'center' }}>
-                <Badge content={`${collection.pagination?.total || collection.entries?.length || 0} entries`} />
-                <Badge content={`${(collection.entries || []).reduce((sum, e) => sum + (e.quantity || 0), 0)} total cards`} />
+               <Badge content={`${collection.pagination?.total || collection.entries?.length || 0} entries`} />
+               <Badge content={`${tableData.reduce((sum, e) => sum + (e.quantity || 0), 0)} total cards`} />
                 {(priceLoading || cardLoading) && (
                   <span style={{ fontSize: 13, color: COLORS.muted }}>
                     {totalPages > 1 && currentPageNum > 0 ? (
@@ -841,7 +865,6 @@ const CollectionDetail = () => {
                     <Progress.Line
                       percent={Math.round(paginationProgress * 100)}
                       status="active"
-                      strokeColor={{ from: '#108ee9', to: '#87d068' }}
                     />
                   </div>
                 )}
@@ -855,26 +878,15 @@ const CollectionDetail = () => {
                   </Button>
                 )}
               </div>
-              {tableData.length > 0 && !priceLoading && (() => {
-                const withPurchase = tableData.filter((r) => r.purchase_price_raw != null);
-                const totalPurchase = withPurchase.reduce((s, r) => s + r.purchase_price_raw * (r.quantity || 1), 0);
-                const totalCurrent = tableData.reduce((s, r) => s + (r.current_price_raw || 0) * (r.quantity || 1), 0);
-                const trackable = withPurchase.filter((r) => r.current_price_raw != null);
-                const trackablePurchase = trackable.reduce((s, r) => s + r.purchase_price_raw * (r.quantity || 1), 0);
-                const trackableCurrent = trackable.reduce((s, r) => s + r.current_price_raw * (r.quantity || 1), 0);
-                const totalGainLoss = trackableCurrent - trackablePurchase;
-                const glColor = totalGainLoss > 0 ? COLORS.gain : totalGainLoss < 0 ? COLORS.loss : COLORS.muted;
-                const glPrefix = totalGainLoss > 0 ? '+' : '';
-                return (
-                  <div style={{ display: 'flex', gap: SPACING.statsGap, flexWrap: 'wrap', marginTop: 8, fontSize: 13 }}>
-                    <span>Purchase Value: <strong>${totalPurchase.toFixed(2)}</strong></span>
-                    <span>Current Value: <strong>${totalCurrent.toFixed(2)}</strong></span>
-                    {trackable.length > 0 && (
-                      <span>Gain/Loss: <strong style={{ color: glColor }}>{glPrefix}${totalGainLoss.toFixed(2)}</strong></span>
-                    )}
-                  </div>
-                );
-              })()}
+              {tableData.length > 0 && !priceLoading && (
+                <div style={{ display: 'flex', gap: SPACING.statsGap, flexWrap: 'wrap', marginTop: 8, fontSize: 13 }}>
+                  <span>Purchase Value: <strong>${priceSummary.totalPurchase.toFixed(2)}</strong></span>
+                  <span>Current Value: <strong>${priceSummary.totalCurrent.toFixed(2)}</strong></span>
+                  {priceSummary.trackable.length > 0 && (
+                    <span>Gain/Loss: <strong style={{ color: priceSummary.glColor }}>{priceSummary.glPrefix}${priceSummary.totalGainLoss.toFixed(2)}</strong></span>
+                  )}
+                </div>
+              )}
             </div>
 
             {tableData.length > 0 && (
