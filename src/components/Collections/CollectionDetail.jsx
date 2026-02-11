@@ -13,6 +13,7 @@ import {
   Modal,
   useToaster,
   Panel,
+  Progress,
 } from 'rsuite';
 import { ArrowDown } from '@rsuite/icons';
 
@@ -117,6 +118,9 @@ const CollectionDetail = () => {
   const [refreshKey, setRefreshKey] = useState(0);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [statsExpanded, setStatsExpanded] = useState(true);
+  const [paginationProgress, setPaginationProgress] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [currentPageNum, setCurrentPageNum] = useState(1);
   const priceCacheRef = useRef({});
   const toaster = useToaster();
   const isMountedRef = useRef(true);
@@ -124,6 +128,33 @@ const CollectionDetail = () => {
   useEffect(() => {
     return () => { isMountedRef.current = false; };
   }, []);
+
+  const enrichEntries = (entries, cards) => entries.map((entry, idx) => {
+    const card = cards[idx];
+    const usdPrice = card?.prices?.usd || card?.prices?.usd_foil || null;
+    const currentRaw = usdPrice ? Number(usdPrice) : null;
+    const purchaseRaw = entry.purchase_price != null ? Number(entry.purchase_price) : null;
+    const gainLossRaw = (purchaseRaw != null && currentRaw != null)
+      ? currentRaw - purchaseRaw
+      : null;
+    const rawColors = card?.colors || [];
+    return {
+      ...entry,
+      name: card?.name || 'Unknown Card',
+      type_line: card?.type_line || '',
+      rarity: card?.rarity || '',
+      colors_raw: rawColors,
+      colors: rawColors.join(', ') || 'Colorless',
+      set_name: card?.set_name || '',
+      purchase_price_display: purchaseRaw != null
+        ? `$${purchaseRaw.toFixed(2)}`
+        : '',
+      current_price: currentRaw != null ? `$${currentRaw.toFixed(2)}` : '',
+      current_price_raw: currentRaw,
+      purchase_price_raw: purchaseRaw,
+      gain_loss_raw: gainLossRaw,
+    };
+  });
 
   const fetchCardsBatch = async (scryfallIds) => {
     const cache = priceCacheRef.current;
@@ -165,66 +196,126 @@ const CollectionDetail = () => {
     const fetchCollection = async () => {
       setLoading(true);
       setError('');
+      setTableData([]);
+      setPaginationProgress(0);
+      setTotalPages(0);
+      setCurrentPageNum(1);
+
       try {
-        const response = await authFetch(`/collections/${id}?limit=100`);
+        // Fetch first page
+        const firstResponse = await authFetch(`/collections/${id}?limit=100&page=1`);
         if (!isMountedRef.current) return;
-        if (!response.ok) {
-          if (response.status === 404) {
+        if (!firstResponse.ok) {
+          if (firstResponse.status === 404) {
             setError('Collection not found');
-          } else if (response.status === 403) {
+          } else if (firstResponse.status === 403) {
             setError('You do not have access to this collection');
           } else {
             setError('Failed to load collection');
           }
           return;
         }
-        const data = await response.json();
+        const firstData = await firstResponse.json();
         if (!isMountedRef.current) return;
-        setCollection(data);
 
-        if (data.entries && data.entries.length > 0) {
+        setCollection(firstData);
+        const totalPagesCount = firstData.pagination?.totalPages || 1;
+        setTotalPages(totalPagesCount);
+
+        if (firstData.entries && firstData.entries.length > 0) {
           setCardLoading(true);
           setPriceLoading(true);
 
-          const scryfallIds = data.entries.map((e) => e.scryfall_id);
+          // Show first page immediately without Scryfall enrichment
+          const basicData = firstData.entries.map((entry) => ({
+            ...entry,
+            name: 'Unknown Card',
+            type_line: '',
+            rarity: '',
+            colors_raw: [],
+            colors: 'Colorless',
+            set_name: '',
+            purchase_price_display: entry.purchase_price != null
+              ? `$${Number(entry.purchase_price).toFixed(2)}`
+              : '',
+            current_price: '',
+            current_price_raw: null,
+            purchase_price_raw: entry.purchase_price != null ? Number(entry.purchase_price) : null,
+            gain_loss_raw: null,
+          }));
+          setTableData(basicData);
+          // Hide loading spinner - table is now visible with basic data
+          if (isMountedRef.current) setLoading(false);
+
+          // Enrich first page in background
+          const scryfallIds = firstData.entries.map((e) => e.scryfall_id);
           const cards = await fetchCardsBatch(scryfallIds);
           if (!isMountedRef.current) return;
 
-          const enriched = data.entries.map((entry, idx) => {
-            const card = cards[idx];
-            const usdPrice = card?.prices?.usd || card?.prices?.usd_foil || null;
-            const currentRaw = usdPrice ? Number(usdPrice) : null;
-            const purchaseRaw = entry.purchase_price != null ? Number(entry.purchase_price) : null;
-            const gainLossRaw = (purchaseRaw != null && currentRaw != null)
-              ? currentRaw - purchaseRaw
-              : null;
-            const rawColors = card?.colors || [];
-            return {
-              ...entry,
-              name: card?.name || 'Unknown Card',
-              type_line: card?.type_line || '',
-              rarity: card?.rarity || '',
-              colors_raw: rawColors,
-              colors: rawColors.join(', ') || 'Colorless',
-              set_name: card?.set_name || '',
-              purchase_price_display: purchaseRaw != null
-                ? `$${purchaseRaw.toFixed(2)}`
-                : '',
-              current_price: currentRaw != null ? `$${currentRaw.toFixed(2)}` : '',
-              current_price_raw: currentRaw,
-              purchase_price_raw: purchaseRaw,
-              gain_loss_raw: gainLossRaw,
-            };
-          });
+          const enriched = enrichEntries(firstData.entries, cards);
 
           setTableData(enriched);
-          setCardLoading(false);
-          setPriceLoading(false);
+          if (isMountedRef.current) {
+            setPaginationProgress(1 / totalPagesCount);
+            setCurrentPageNum(1);
+          }
+
+          // Fetch remaining pages in background
+          if (totalPagesCount > 1) {
+            let allEnrichedData = enriched;
+
+            for (let page = 2; page <= totalPagesCount; page++) {
+              if (!isMountedRef.current) break;
+
+              try {
+                const pageResponse = await authFetch(`/collections/${id}?limit=100&page=${page}`);
+                if (!pageResponse.ok) break;
+
+                const pageData = await pageResponse.json();
+                if (!isMountedRef.current) break;
+
+                if (pageData.entries && pageData.entries.length > 0) {
+                  // Enrich this page
+                  const pageIds = pageData.entries.map((e) => e.scryfall_id);
+                  const pageCards = await fetchCardsBatch(pageIds);
+                  if (!isMountedRef.current) break;
+
+                  const pageEnriched = enrichEntries(pageData.entries, pageCards);
+
+                  // Append to table data
+                  allEnrichedData = allEnrichedData.concat(pageEnriched);
+                  if (isMountedRef.current) {
+                    setTableData(allEnrichedData);
+                    setPaginationProgress(page / totalPagesCount);
+                    setCurrentPageNum(page);
+                  }
+                }
+              } catch (err) {
+                // Page fetch failed, continue with what we have
+                console.error(`Failed to fetch page ${page}:`, err.message);
+                if (isMountedRef.current) {
+                  toaster.push(
+                    <Message type="warning" showIcon closable>
+                      Failed to load page {page} — showing available data
+                    </Message>,
+                    { placement: 'topCenter', duration: 3000 }
+                  );
+                }
+              }
+            }
+
+            setCardLoading(false);
+            setPriceLoading(false);
+          } else {
+            setCardLoading(false);
+            setPriceLoading(false);
+          }
         }
       } catch (err) {
         if (isMountedRef.current) setError('Unable to connect to server');
       } finally {
-        if (isMountedRef.current) setLoading(false);
+        // Ensure loading is hidden if error occurred before first page was displayed
+        if (isMountedRef.current && loading) setLoading(false);
       }
     };
 
@@ -392,6 +483,44 @@ const CollectionDetail = () => {
     const col = allColumns.find((c) => (c.sortKey || c.key) === sortColumn);
     return col ? col.key : sortColumn;
   }, [sortColumn, allColumns]);
+
+  const priceSummary = useMemo(() => {
+    if (tableData.length === 0) {
+      return {
+        withPurchase: [],
+        totalPurchase: 0,
+        totalCurrent: 0,
+        trackable: [],
+        trackablePurchase: 0,
+        trackableCurrent: 0,
+        totalGainLoss: 0,
+        glColor: COLORS.muted,
+        glPrefix: '',
+      };
+    }
+
+    const withPurchase = tableData.filter((r) => r.purchase_price_raw != null);
+    const totalPurchase = withPurchase.reduce((s, r) => s + r.purchase_price_raw * (r.quantity || 1), 0);
+    const totalCurrent = tableData.reduce((s, r) => s + (r.current_price_raw || 0) * (r.quantity || 1), 0);
+    const trackable = withPurchase.filter((r) => r.current_price_raw != null);
+    const trackablePurchase = trackable.reduce((s, r) => s + r.purchase_price_raw * (r.quantity || 1), 0);
+    const trackableCurrent = trackable.reduce((s, r) => s + r.current_price_raw * (r.quantity || 1), 0);
+    const totalGainLoss = trackableCurrent - trackablePurchase;
+    const glColor = totalGainLoss > 0 ? COLORS.gain : totalGainLoss < 0 ? COLORS.loss : COLORS.muted;
+    const glPrefix = totalGainLoss > 0 ? '+' : '';
+
+    return {
+      withPurchase,
+      totalPurchase,
+      totalCurrent,
+      trackable,
+      trackablePurchase,
+      trackableCurrent,
+      totalGainLoss,
+      glColor,
+      glPrefix,
+    };
+  }, [tableData]);
 
   const handleClearFilters = () => {
     setNameSearch('');
@@ -641,9 +770,9 @@ const CollectionDetail = () => {
             <div style={{ gridColumn: isMobile ? 'auto' : '1 / -1' }}>
               <h5 style={{ marginTop: 0, marginBottom: 12, fontSize: 14 }}>Top 10 Most Valuable</h5>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 250, overflowY: 'auto' }}>
-                {stats.top10MostValuableCards.map((card, idx) => (
+                {stats.top10MostValuableCards.map((card) => (
                   <div
-                    key={idx}
+                    key={card.scryfall_id}
                     style={{
                       display: 'flex',
                       justifyContent: 'space-between',
@@ -720,9 +849,25 @@ const CollectionDetail = () => {
                 </p>
               )}
               <div style={{ display: 'flex', gap: SPACING.statsGap, flexWrap: 'wrap', alignItems: 'center' }}>
-                <Badge content={`${collection.entries?.length || 0} entries`} />
-                <Badge content={`${(collection.entries || []).reduce((sum, e) => sum + (e.quantity || 0), 0)} total cards`} />
-                {priceLoading && <Loader size="xs" content="Fetching prices..." />}
+               <Badge content={`${collection.pagination?.total || collection.entries?.length || 0} entries`} />
+               <Badge content={`${tableData.reduce((sum, e) => sum + (e.quantity || 0), 0)} total cards`} />
+                {(priceLoading || cardLoading) && (
+                  <span style={{ fontSize: 13, color: COLORS.muted }}>
+                    {totalPages > 1 && currentPageNum > 0 ? (
+                      <>Loading page {currentPageNum} of {totalPages}...</>
+                    ) : (
+                      <>Fetching prices...</>
+                    )}
+                  </span>
+                )}
+                {totalPages > 1 && paginationProgress > 0 && paginationProgress < 1 && (
+                  <div style={{ width: 200, marginLeft: 8 }}>
+                    <Progress.Line
+                      percent={Math.round(paginationProgress * 100)}
+                      status="active"
+                    />
+                  </div>
+                )}
                 {tableData.length > 0 && (
                   <Button
                     size="xs"
@@ -733,26 +878,15 @@ const CollectionDetail = () => {
                   </Button>
                 )}
               </div>
-              {tableData.length > 0 && !priceLoading && (() => {
-                const withPurchase = tableData.filter((r) => r.purchase_price_raw != null);
-                const totalPurchase = withPurchase.reduce((s, r) => s + r.purchase_price_raw * (r.quantity || 1), 0);
-                const totalCurrent = tableData.reduce((s, r) => s + (r.current_price_raw || 0) * (r.quantity || 1), 0);
-                const trackable = withPurchase.filter((r) => r.current_price_raw != null);
-                const trackablePurchase = trackable.reduce((s, r) => s + r.purchase_price_raw * (r.quantity || 1), 0);
-                const trackableCurrent = trackable.reduce((s, r) => s + r.current_price_raw * (r.quantity || 1), 0);
-                const totalGainLoss = trackableCurrent - trackablePurchase;
-                const glColor = totalGainLoss > 0 ? COLORS.gain : totalGainLoss < 0 ? COLORS.loss : COLORS.muted;
-                const glPrefix = totalGainLoss > 0 ? '+' : '';
-                return (
-                  <div style={{ display: 'flex', gap: SPACING.statsGap, flexWrap: 'wrap', marginTop: 8, fontSize: 13 }}>
-                    <span>Purchase Value: <strong>${totalPurchase.toFixed(2)}</strong></span>
-                    <span>Current Value: <strong>${totalCurrent.toFixed(2)}</strong></span>
-                    {trackable.length > 0 && (
-                      <span>Gain/Loss: <strong style={{ color: glColor }}>{glPrefix}${totalGainLoss.toFixed(2)}</strong></span>
-                    )}
-                  </div>
-                );
-              })()}
+              {tableData.length > 0 && !priceLoading && (
+                <div style={{ display: 'flex', gap: SPACING.statsGap, flexWrap: 'wrap', marginTop: 8, fontSize: 13 }}>
+                  <span>Purchase Value: <strong>${priceSummary.totalPurchase.toFixed(2)}</strong></span>
+                  <span>Current Value: <strong>${priceSummary.totalCurrent.toFixed(2)}</strong></span>
+                  {priceSummary.trackable.length > 0 && (
+                    <span>Gain/Loss: <strong style={{ color: priceSummary.glColor }}>{priceSummary.glPrefix}${priceSummary.totalGainLoss.toFixed(2)}</strong></span>
+                  )}
+                </div>
+              )}
             </div>
 
             {tableData.length > 0 && (
@@ -790,7 +924,7 @@ const CollectionDetail = () => {
                 sortType={sortType}
                 onSortColumn={handleSortColumn}
               >
-                {columns.map(({ key, label, custom, ...rest }) => (
+                {columns.map(({ key, label, custom, sortKey, ...rest }) => (
                   <Column {...rest} key={key}>
                     <HeaderCell>{label}</HeaderCell>
                     {custom === 'actions'
