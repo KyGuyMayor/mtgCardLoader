@@ -12,7 +12,9 @@ import {
   Button,
   Modal,
   useToaster,
+  Panel,
 } from 'rsuite';
+import { ArrowDown } from '@rsuite/icons';
 
 import NavigationBar from '../Shared/NavigationBar';
 import EditEntryModal from './EditEntryModal';
@@ -114,6 +116,7 @@ const CollectionDetail = () => {
   const [sortType, setSortType] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [statsExpanded, setStatsExpanded] = useState(true);
   const priceCacheRef = useRef({});
   const toaster = useToaster();
   const isMountedRef = useRef(true);
@@ -257,6 +260,76 @@ const CollectionDetail = () => {
 
     return data;
   }, [tableData, nameSearch, colorFilter, rarityFilter, conditionFilter]);
+
+  const stats = useMemo(() => {
+    if (tableData.length === 0) {
+      return {
+        totalCardCount: 0,
+        totalPurchaseValue: 0,
+        colorBreakdown: {},
+        rarityBreakdown: {},
+        top10MostValuableCards: [],
+      };
+    }
+
+    let totalCardCount = 0;
+    let totalPurchaseValue = 0;
+    const colorBreakdown = {};
+    const rarityBreakdown = {};
+    const cardsByPrice = [];
+
+    tableData.forEach((row) => {
+      const quantity = row.quantity || 1;
+
+      // Total card count
+      totalCardCount += quantity;
+
+      // Total purchase value
+      if (row.purchase_price_raw != null) {
+        totalPurchaseValue += row.purchase_price_raw * quantity;
+      }
+
+      // Color breakdown
+      const colors = row.colors_raw || [];
+      let colorKey;
+      if (colors.length === 0) {
+        colorKey = 'Colorless';
+      } else if (colors.length === 1) {
+        colorKey = colors[0];
+      } else {
+        colorKey = 'Multicolor';
+      }
+      colorBreakdown[colorKey] = (colorBreakdown[colorKey] || 0) + quantity;
+
+      // Rarity breakdown
+      const rarity = row.rarity ? row.rarity.charAt(0).toUpperCase() + row.rarity.slice(1) : 'Unknown';
+      rarityBreakdown[rarity] = (rarityBreakdown[rarity] || 0) + quantity;
+
+      // Top 10 most valuable
+      if (row.purchase_price_raw != null) {
+        cardsByPrice.push({
+          name: row.name,
+          scryfall_id: row.scryfall_id,
+          quantity: quantity,
+          purchasePrice: row.purchase_price_raw,
+          totalValue: row.purchase_price_raw * quantity,
+        });
+      }
+    });
+
+    // Get top 10 most valuable cards
+    const top10MostValuableCards = cardsByPrice
+      .sort((a, b) => b.totalValue - a.totalValue)
+      .slice(0, 10);
+
+    return {
+      totalCardCount,
+      totalPurchaseValue: Math.round(totalPurchaseValue * 100) / 100,
+      colorBreakdown,
+      rarityBreakdown,
+      top10MostValuableCards,
+    };
+  }, [tableData]);
 
   const allColumns = useMemo(() => (
     isMobile
@@ -439,6 +512,164 @@ const CollectionDetail = () => {
     </span>
   );
 
+  const renderStatsSection = () => {
+    if (!stats || tableData.length === 0) return null;
+
+    // Color breakdown pie chart (simple bars)
+    const colorEntries = Object.entries(stats.colorBreakdown).sort((a, b) => b[1] - a[1]);
+    const maxColorCount = Math.max(...colorEntries.map(e => e[1]), 1);
+
+    // Rarity breakdown
+    const rarityOrder = { 'Common': 0, 'Uncommon': 1, 'Rare': 2, 'Mythic': 3 };
+    const rarityEntries = Object.entries(stats.rarityBreakdown)
+      .sort((a, b) => (rarityOrder[a[0]] ?? 99) - (rarityOrder[b[0]] ?? 99));
+    const maxRarityCount = Math.max(...rarityEntries.map(e => e[1]), 1);
+
+    return (
+      <Panel
+        style={{
+          marginBottom: 20,
+          backgroundColor: '#2c2c2c',
+          borderColor: '#444',
+        }}
+        bordered
+        header={
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h4 style={{ margin: 0 }}>Collection Statistics</h4>
+            <Button
+              size="xs"
+              appearance="subtle"
+              onClick={() => setStatsExpanded(!statsExpanded)}
+              style={{ padding: '4px 8px', transform: statsExpanded ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 0.2s' }}
+            >
+              <ArrowDown />
+            </Button>
+          </div>
+        }
+      >
+        {statsExpanded && (
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 24, padding: '12px 0' }}>
+          {/* Color Breakdown */}
+          <div>
+            <h5 style={{ marginTop: 0, marginBottom: 12, fontSize: 14 }}>Colors</h5>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {colorEntries.map(([color, count]) => {
+                const barWidth = (count / maxColorCount) * 100;
+                return (
+                  <div key={color} style={{ fontSize: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                      <span>{color}</span>
+                      <span>{count}</span>
+                    </div>
+                    <div
+                      style={{
+                        width: '100%',
+                        height: 6,
+                        backgroundColor: '#444',
+                        borderRadius: 2,
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: `${barWidth}%`,
+                          height: '100%',
+                          backgroundColor: '#3498db',
+                          transition: 'width 0.2s',
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Rarity Breakdown */}
+          <div>
+            <h5 style={{ marginTop: 0, marginBottom: 12, fontSize: 14 }}>Rarity</h5>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {rarityEntries.map(([rarity, count]) => {
+                const barWidth = (count / maxRarityCount) * 100;
+                return (
+                  <div key={rarity} style={{ fontSize: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                      <span>{rarity}</span>
+                      <span>{count}</span>
+                    </div>
+                    <div
+                      style={{
+                        width: '100%',
+                        height: 6,
+                        backgroundColor: '#444',
+                        borderRadius: 2,
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: `${barWidth}%`,
+                          height: '100%',
+                          backgroundColor: '#2ecc71',
+                          transition: 'width 0.2s',
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Summary Stats */}
+          <div>
+            <h5 style={{ marginTop: 0, marginBottom: 12, fontSize: 14 }}>Summary</h5>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Total Cards:</span>
+                <strong>{stats.totalCardCount}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Total Purchase Value:</span>
+                <strong>${stats.totalPurchaseValue.toFixed(2)}</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* Top 10 Most Valuable */}
+          {stats.top10MostValuableCards.length > 0 && (
+            <div style={{ gridColumn: isMobile ? 'auto' : '1 / -1' }}>
+              <h5 style={{ marginTop: 0, marginBottom: 12, fontSize: 14 }}>Top 10 Most Valuable</h5>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 250, overflowY: 'auto' }}>
+                {stats.top10MostValuableCards.map((card, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      fontSize: 12,
+                      paddingBottom: 4,
+                      borderBottom: '1px solid #444',
+                    }}
+                  >
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {card.name}
+                      {card.quantity > 1 && <span style={{ color: COLORS.muted }}> x{card.quantity}</span>}
+                    </span>
+                    <span style={{ marginLeft: 8, whiteSpace: 'nowrap', fontWeight: 'bold' }}>
+                      ${card.totalValue.toFixed(2)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        )}
+      </Panel>
+    );
+  };
+
   if (loading) {
     return (
       <CustomProvider theme="dark">
@@ -539,6 +770,8 @@ const CollectionDetail = () => {
                 filteredCount={sortedData.length}
               />
             )}
+
+            {renderStatsSection()}
 
             {tableData.length === 0 && !cardLoading ? (
               <div style={{ textAlign: 'center', padding: `${SPACING.emptyPadding}px 0`, color: COLORS.muted }}>
