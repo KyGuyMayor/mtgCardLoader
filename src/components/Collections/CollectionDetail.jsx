@@ -13,6 +13,7 @@ import {
   Modal,
   useToaster,
   Panel,
+  Progress,
 } from 'rsuite';
 import { ArrowDown } from '@rsuite/icons';
 
@@ -117,6 +118,9 @@ const CollectionDetail = () => {
   const [refreshKey, setRefreshKey] = useState(0);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [statsExpanded, setStatsExpanded] = useState(true);
+  const [paginationProgress, setPaginationProgress] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [currentPageNum, setCurrentPageNum] = useState(1);
   const priceCacheRef = useRef({});
   const toaster = useToaster();
   const isMountedRef = useRef(true);
@@ -165,32 +169,63 @@ const CollectionDetail = () => {
     const fetchCollection = async () => {
       setLoading(true);
       setError('');
+      setTableData([]);
+      setPaginationProgress(0);
+      setTotalPages(0);
+      setCurrentPageNum(1);
+
       try {
-        const response = await authFetch(`/collections/${id}?limit=100`);
+        // Fetch first page
+        const firstResponse = await authFetch(`/collections/${id}?limit=100&page=1`);
         if (!isMountedRef.current) return;
-        if (!response.ok) {
-          if (response.status === 404) {
+        if (!firstResponse.ok) {
+          if (firstResponse.status === 404) {
             setError('Collection not found');
-          } else if (response.status === 403) {
+          } else if (firstResponse.status === 403) {
             setError('You do not have access to this collection');
           } else {
             setError('Failed to load collection');
           }
           return;
         }
-        const data = await response.json();
+        const firstData = await firstResponse.json();
         if (!isMountedRef.current) return;
-        setCollection(data);
 
-        if (data.entries && data.entries.length > 0) {
+        setCollection(firstData);
+        const totalPagesCount = firstData.pagination?.totalPages || 1;
+        setTotalPages(totalPagesCount);
+
+        if (firstData.entries && firstData.entries.length > 0) {
           setCardLoading(true);
           setPriceLoading(true);
 
-          const scryfallIds = data.entries.map((e) => e.scryfall_id);
+          // Show first page immediately without Scryfall enrichment
+          const basicData = firstData.entries.map((entry) => ({
+            ...entry,
+            name: 'Unknown Card',
+            type_line: '',
+            rarity: '',
+            colors_raw: [],
+            colors: 'Colorless',
+            set_name: '',
+            purchase_price_display: entry.purchase_price != null
+              ? `$${Number(entry.purchase_price).toFixed(2)}`
+              : '',
+            current_price: '',
+            current_price_raw: null,
+            purchase_price_raw: entry.purchase_price != null ? Number(entry.purchase_price) : null,
+            gain_loss_raw: null,
+          }));
+          setTableData(basicData);
+          // Hide loading spinner - table is now visible with basic data
+          if (isMountedRef.current) setLoading(false);
+
+          // Enrich first page in background
+          const scryfallIds = firstData.entries.map((e) => e.scryfall_id);
           const cards = await fetchCardsBatch(scryfallIds);
           if (!isMountedRef.current) return;
 
-          const enriched = data.entries.map((entry, idx) => {
+          const enriched = firstData.entries.map((entry, idx) => {
             const card = cards[idx];
             const usdPrice = card?.prices?.usd || card?.prices?.usd_foil || null;
             const currentRaw = usdPrice ? Number(usdPrice) : null;
@@ -218,8 +253,78 @@ const CollectionDetail = () => {
           });
 
           setTableData(enriched);
-          setCardLoading(false);
-          setPriceLoading(false);
+          if (isMountedRef.current) {
+            setPaginationProgress(1 / totalPagesCount);
+            setCurrentPageNum(1);
+          }
+
+          // Fetch remaining pages in background
+          if (totalPagesCount > 1) {
+            let allEnrichedData = enriched;
+
+            for (let page = 2; page <= totalPagesCount; page++) {
+              if (!isMountedRef.current) break;
+
+              try {
+                const pageResponse = await authFetch(`/collections/${id}?limit=100&page=${page}`);
+                if (!pageResponse.ok) break;
+
+                const pageData = await pageResponse.json();
+                if (!isMountedRef.current) break;
+
+                if (pageData.entries && pageData.entries.length > 0) {
+                  // Enrich this page
+                  const pageIds = pageData.entries.map((e) => e.scryfall_id);
+                  const pageCards = await fetchCardsBatch(pageIds);
+                  if (!isMountedRef.current) break;
+
+                  const pageEnriched = pageData.entries.map((entry, idx) => {
+                    const card = pageCards[idx];
+                    const usdPrice = card?.prices?.usd || card?.prices?.usd_foil || null;
+                    const currentRaw = usdPrice ? Number(usdPrice) : null;
+                    const purchaseRaw = entry.purchase_price != null ? Number(entry.purchase_price) : null;
+                    const gainLossRaw = (purchaseRaw != null && currentRaw != null)
+                      ? currentRaw - purchaseRaw
+                      : null;
+                    const rawColors = card?.colors || [];
+                    return {
+                      ...entry,
+                      name: card?.name || 'Unknown Card',
+                      type_line: card?.type_line || '',
+                      rarity: card?.rarity || '',
+                      colors_raw: rawColors,
+                      colors: rawColors.join(', ') || 'Colorless',
+                      set_name: card?.set_name || '',
+                      purchase_price_display: purchaseRaw != null
+                        ? `$${purchaseRaw.toFixed(2)}`
+                        : '',
+                      current_price: currentRaw != null ? `$${currentRaw.toFixed(2)}` : '',
+                      current_price_raw: currentRaw,
+                      purchase_price_raw: purchaseRaw,
+                      gain_loss_raw: gainLossRaw,
+                    };
+                  });
+
+                  // Append to table data
+                  allEnrichedData = allEnrichedData.concat(pageEnriched);
+                  if (isMountedRef.current) {
+                    setTableData(allEnrichedData);
+                    setPaginationProgress(page / totalPagesCount);
+                    setCurrentPageNum(page);
+                  }
+                }
+              } catch (err) {
+                // Page fetch failed, continue with what we have
+                console.error(`Failed to fetch page ${page}:`, err.message);
+              }
+            }
+
+            setCardLoading(false);
+            setPriceLoading(false);
+          } else {
+            setCardLoading(false);
+            setPriceLoading(false);
+          }
         }
       } catch (err) {
         if (isMountedRef.current) setError('Unable to connect to server');
@@ -720,9 +825,26 @@ const CollectionDetail = () => {
                 </p>
               )}
               <div style={{ display: 'flex', gap: SPACING.statsGap, flexWrap: 'wrap', alignItems: 'center' }}>
-                <Badge content={`${collection.entries?.length || 0} entries`} />
+                <Badge content={`${collection.pagination?.total || collection.entries?.length || 0} entries`} />
                 <Badge content={`${(collection.entries || []).reduce((sum, e) => sum + (e.quantity || 0), 0)} total cards`} />
-                {priceLoading && <Loader size="xs" content="Fetching prices..." />}
+                {(priceLoading || cardLoading) && (
+                  <span style={{ fontSize: 13, color: COLORS.muted }}>
+                    {totalPages > 1 && currentPageNum > 0 ? (
+                      <>Loading page {currentPageNum} of {totalPages}...</>
+                    ) : (
+                      <>Fetching prices...</>
+                    )}
+                  </span>
+                )}
+                {totalPages > 1 && paginationProgress > 0 && paginationProgress < 1 && (
+                  <div style={{ width: 200, marginLeft: 8 }}>
+                    <Progress.Line
+                      percent={Math.round(paginationProgress * 100)}
+                      status="active"
+                      strokeColor={{ from: '#108ee9', to: '#87d068' }}
+                    />
+                  </div>
+                )}
                 {tableData.length > 0 && (
                   <Button
                     size="xs"
@@ -790,7 +912,7 @@ const CollectionDetail = () => {
                 sortType={sortType}
                 onSortColumn={handleSortColumn}
               >
-                {columns.map(({ key, label, custom, ...rest }) => (
+                {columns.map(({ key, label, custom, sortKey, ...rest }) => (
                   <Column {...rest} key={key}>
                     <HeaderCell>{label}</HeaderCell>
                     {custom === 'actions'
