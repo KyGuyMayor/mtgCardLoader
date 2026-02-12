@@ -1,6 +1,7 @@
 const db = require('../src/db');
 const https = require('https');
 const { rateLimitedRequest, RateLimitTimeoutError } = require('../src/helpers/rateLimiter');
+const { DECK_FORMAT_RULES, isBasicLand } = require('../src/helpers/deckRules');
 
 const VALID_TYPES = ['TRADE_BINDER', 'DECK'];
 const VALID_DECK_TYPES = [
@@ -380,6 +381,315 @@ exports.stats = async (req, res) => {
   } catch (error) {
     if (handleTimeoutError(error, res)) return;
     console.error('Get stats error:', error.message);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.validate = async (req, res) => {
+  const user_id = req.user.id;
+  const { id } = req.params;
+
+  try {
+    // Check collection exists and user owns it
+    const collection = await db('collections').where({ id }).first();
+
+    if (!collection) {
+      return res.status(404).json({ error: 'Collection not found' });
+    }
+
+    if (collection.user_id !== user_id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    // Only validate DECK type collections
+    if (collection.type !== 'DECK') {
+      return res.status(400).json({ error: 'Validation only applies to DECK type collections' });
+    }
+
+    // Get format rules
+    const formatRules = DECK_FORMAT_RULES[collection.deck_type];
+    if (!formatRules) {
+      return res.status(400).json({ error: 'Invalid deck format' });
+    }
+
+    // Get all entries for this collection
+    const entries = await db('collection_entries')
+      .where({ collection_id: id })
+      .select('id', 'scryfall_id', 'quantity', 'is_commander', 'is_sideboard');
+
+    // Initialize result
+    const errors = [];
+    const warnings = [];
+
+    // Empty deck check
+    if (entries.length === 0) {
+      errors.push({
+        type: 'DECK_SIZE_MIN',
+        message: `Deck must have at least ${formatRules.minDeckSize} cards`,
+        cards: [],
+      });
+      return res.status(200).json({
+        valid: false,
+        errors,
+        warnings,
+      });
+    }
+
+    // Fetch all card data from Scryfall in batches of 75
+    const scryfallIds = entries.map(e => e.scryfall_id);
+    const cardDataMap = {};
+    let allCards = [];
+
+    for (let i = 0; i < scryfallIds.length; i += 75) {
+      const chunk = scryfallIds.slice(i, i + 75);
+      const result = await rateLimitedRequest(() => fetchCardsFromScryfall(chunk));
+      if (result.data) {
+        allCards = allCards.concat(result.data);
+        result.data.forEach(card => {
+          cardDataMap[card.id] = card;
+        });
+      }
+      // Add 100ms delay between chunks to respect rate limits
+      if (i + 75 < scryfallIds.length) {
+        await new Promise(r => setTimeout(r, 100));
+      }
+    }
+
+    // Prepare lookup: entry ID to card data
+    const entryToCard = {};
+    const entryToCopyName = {};
+    let mainDeckCount = 0;
+    let sideboardCount = 0;
+    let commanderEntry = null;
+
+    entries.forEach(entry => {
+      const card = cardDataMap[entry.scryfall_id];
+      if (card) {
+        entryToCard[entry.id] = card;
+        // Use oracle name for grouping copies (not display name)
+        entryToCopyName[entry.id] = card.name;
+        const qty = entry.quantity || 1;
+        if (entry.is_sideboard) {
+          sideboardCount += qty;
+        } else {
+          mainDeckCount += qty;
+        }
+        if (entry.is_commander) {
+          commanderEntry = { entry, card };
+        }
+      }
+    });
+
+    // Validate main deck size
+    if (formatRules.minDeckSize !== null && mainDeckCount < formatRules.minDeckSize) {
+      errors.push({
+        type: 'DECK_SIZE_MIN',
+        message: `Main deck must have at least ${formatRules.minDeckSize} cards (currently ${mainDeckCount})`,
+        cards: [],
+      });
+    }
+
+    if (formatRules.maxDeckSize !== null && mainDeckCount > formatRules.maxDeckSize) {
+      errors.push({
+        type: 'DECK_SIZE_MAX',
+        message: `Main deck must not exceed ${formatRules.maxDeckSize} cards (currently ${mainDeckCount})`,
+        cards: [],
+      });
+    }
+
+    // Validate sideboard size (if format has a sideboard limit)
+    if (formatRules.sideboardSize !== null && formatRules.sideboardSize > 0 && sideboardCount > formatRules.sideboardSize) {
+      errors.push({
+        type: 'SIDEBOARD_SIZE_MAX',
+        message: `Sideboard must not exceed ${formatRules.sideboardSize} cards (currently ${sideboardCount})`,
+        cards: [],
+      });
+    }
+
+    // Validate card copy limits
+    const copyCountByName = {};
+    entries.forEach(entry => {
+      const card = entryToCard[entry.id];
+      if (card) {
+        const cardName = entryToCopyName[entry.id];
+        if (!copyCountByName[cardName]) {
+          copyCountByName[cardName] = { count: 0, entries: [], isBasicLand: false };
+        }
+        copyCountByName[cardName].count += entry.quantity || 1;
+        copyCountByName[cardName].entries.push({ entry, card });
+        copyCountByName[cardName].isBasicLand = isBasicLand(cardName);
+      }
+    });
+
+    Object.entries(copyCountByName).forEach(([cardName, data]) => {
+      const { count, entries: cardEntries, isBasicLand: isBasic } = data;
+
+      // Skip basic lands if exempt
+      if (formatRules.basicLandExempt && isBasic) {
+        return;
+      }
+
+      // Check copy limit (null means unlimited)
+      if (formatRules.maxCopies !== null && count > formatRules.maxCopies) {
+        const offendingCards = cardEntries.map(ce => ({
+          name: ce.card.name,
+          scryfall_id: ce.entry.scryfall_id,
+        }));
+        errors.push({
+          type: 'COPY_LIMIT',
+          message: `${cardName} exceeds copy limit (max ${formatRules.maxCopies}, have ${count})`,
+          cards: offendingCards,
+        });
+      }
+
+      // Check Vintage restricted limit
+      if (collection.deck_type === 'VINTAGE') {
+        const firstCard = cardEntries[0].card;
+        if (firstCard.legalities && firstCard.legalities.vintage === 'restricted' && count > 1) {
+          const offendingCards = cardEntries.map(ce => ({
+            name: ce.card.name,
+            scryfall_id: ce.entry.scryfall_id,
+          }));
+          warnings.push({
+            type: 'RESTRICTED_LIMIT',
+            message: `${cardName} is restricted in Vintage (max 1 copy allowed, have ${count})`,
+            cards: offendingCards,
+          });
+        }
+      }
+    });
+
+    // Format-specific legality validation
+    if (formatRules.scryfallLegalityKey) {
+      // Standard legality check
+      entries.forEach(entry => {
+        const card = entryToCard[entry.id];
+        if (card && !isBasicLand(card.name)) {
+          const legality = card.legalities?.[formatRules.scryfallLegalityKey];
+          if (legality !== 'legal' && legality !== 'restricted') {
+            errors.push({
+              type: 'FORMAT_LEGALITY',
+              message: `${card.name} is not legal in ${formatRules.name}`,
+              cards: [{ name: card.name, scryfall_id: entry.scryfall_id }],
+            });
+          }
+        }
+      });
+    } else if (collection.deck_type === 'PLANAR_STANDARD') {
+      // Planar Standard: check by set code and banned list
+      entries.forEach(entry => {
+        const card = entryToCard[entry.id];
+        if (card) {
+          // Check banned list
+          if (formatRules.bannedCards.includes(card.name)) {
+            errors.push({
+              type: 'BANNED_CARD',
+              message: `${card.name} is banned in ${formatRules.name}`,
+              cards: [{ name: card.name, scryfall_id: entry.scryfall_id }],
+            });
+          }
+          // Check set legality
+          if (!formatRules.legalSets.includes(card.set)) {
+            errors.push({
+              type: 'SET_LEGALITY',
+              message: `${card.name} is not from a legal set in ${formatRules.name}`,
+              cards: [{ name: card.name, scryfall_id: entry.scryfall_id }],
+            });
+          }
+        }
+      });
+    }
+
+    // Commander-specific validation
+    if (formatRules.requiresCommander) {
+      // Validate exactly one commander
+      if (!commanderEntry) {
+        errors.push({
+          type: 'COMMANDER_MISSING',
+          message: 'Deck must have exactly one commander',
+          cards: [],
+        });
+      } else {
+        const { entry: cmdEntry, card: cmdCard } = commanderEntry;
+
+        // Validate commander is legendary creature or has "can be your commander"
+        const isLegendaryCrature =
+          cmdCard.type_line &&
+          cmdCard.type_line.includes('Legendary') &&
+          cmdCard.type_line.includes('Creature');
+
+        const hasCommanderText =
+          cmdCard.oracle_text &&
+          cmdCard.oracle_text.toLowerCase().includes('can be your commander');
+
+        if (!isLegendaryCrature && !hasCommanderText) {
+          errors.push({
+            type: 'COMMANDER_INVALID',
+            message: `${cmdCard.name} is not a valid commander (must be a legendary creature or have 'can be your commander' text)`,
+            cards: [{ name: cmdCard.name, scryfall_id: cmdEntry.scryfall_id }],
+          });
+        } else {
+          // Validate color identity constraint
+          const commanderColorIdentity = cmdCard.color_identity || [];
+          const illegalCards = [];
+
+          entries.forEach(entry => {
+            if (entry.id === cmdEntry.id) {
+              return; // Skip commander itself
+            }
+            const card = entryToCard[entry.id];
+            if (card && !isBasicLand(card.name)) {
+              const cardColorIdentity = card.color_identity || [];
+              // Check if card's color identity is a subset of commander's
+              const isLegal = cardColorIdentity.every(color =>
+                commanderColorIdentity.includes(color)
+              );
+              if (!isLegal) {
+                illegalCards.push({
+                  name: card.name,
+                  scryfall_id: entry.scryfall_id,
+                });
+              }
+            }
+          });
+
+          if (illegalCards.length > 0) {
+            errors.push({
+              type: 'COLOR_IDENTITY',
+              message: `Some cards do not match commander's color identity`,
+              cards: illegalCards,
+            });
+          }
+        }
+      }
+
+      // Validate no sideboard (Commander format has no sideboard)
+      if (sideboardCount > 0) {
+        errors.push({
+          type: 'SIDEBOARD_NOT_ALLOWED',
+          message: `Commander decks do not have sideboards (currently ${sideboardCount} sideboard cards)`,
+          cards: [],
+        });
+      }
+
+      // Validate exactly 100 cards in main deck
+      if (mainDeckCount !== 100) {
+        errors.push({
+          type: 'DECK_SIZE_MIN',
+          message: `Commander decks must have exactly 100 cards (currently ${mainDeckCount})`,
+          cards: [],
+        });
+      }
+    }
+
+    return res.status(200).json({
+      valid: errors.length === 0,
+      errors,
+      warnings,
+    });
+  } catch (error) {
+    if (handleTimeoutError(error, res)) return;
+    console.error('Validate deck error:', error.message);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };

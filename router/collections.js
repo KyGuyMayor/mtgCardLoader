@@ -9,6 +9,7 @@ router.use(authenticate);
 
 router.get('/', collectionController.list);
 router.get('/:id/stats', collectionController.stats);
+router.get('/:id/validate', collectionController.validate);
 router.get('/:id', collectionController.getById);
 router.post('/', collectionController.create);
 router.put('/:id', collectionController.update);

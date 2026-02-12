@@ -12,6 +12,7 @@ import {
   Loader,
 } from 'rsuite';
 import authFetch from '../../helpers/authFetch';
+import { DECK_FORMAT_RULES, isBasicLand } from '../../helpers/deckRules';
 
 const CONDITION_OPTIONS = [
   { label: 'Mint', value: 'MINT' },
@@ -36,12 +37,15 @@ const INITIAL_FORM = {
   is_sideboard: false,
 };
 
-const AddToCollectionModal = ({ open, onClose, scryfallId, cardName }) => {
+const AddToCollectionModal = ({ open, onClose, scryfallId, cardName, card }) => {
   const [formData, setFormData] = useState({ ...INITIAL_FORM });
   const [collections, setCollections] = useState([]);
   const [loadingCollections, setLoadingCollections] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [warnings, setWarnings] = useState([]);
+  const [loadingCollectionDetails, setLoadingCollectionDetails] = useState(false);
+  const [collectionDetails, setCollectionDetails] = useState(null);
   const toaster = useToaster();
 
   useEffect(() => {
@@ -140,9 +144,124 @@ const AddToCollectionModal = ({ open, onClose, scryfallId, cardName }) => {
       if (field === 'collection_id') {
         next.is_commander = false;
         next.is_sideboard = false;
+        // Fetch collection details and validate when collection changes
+        if (value) {
+          validateCollectionForDeck(value);
+        } else {
+          setWarnings([]);
+          setCollectionDetails(null);
+        }
       }
       return next;
     });
+  };
+
+  const validateCollectionForDeck = async (collectionId) => {
+    const col = collections.find((c) => c.id === collectionId);
+    setWarnings([]);
+    setCollectionDetails(null);
+
+    // Only validate for DECK type collections
+    if (!col || col.type !== 'DECK') {
+      return;
+    }
+
+    // Get format rules
+    const formatRules = DECK_FORMAT_RULES[col.deck_type];
+    if (!formatRules || col.deck_type === 'OTHER') {
+      return;
+    }
+
+    setLoadingCollectionDetails(true);
+    try {
+      // Fetch collection details with entries
+      const response = await authFetch(`/collections/${collectionId}?limit=1000`);
+      if (!response.ok) {
+        return;
+      }
+      const details = await response.json();
+      setCollectionDetails(details);
+
+      // Only validate if we have a card object with necessary data
+      if (!card) {
+        return;
+      }
+
+      const validationWarnings = [];
+
+      // 1. Check format legality
+      if (formatRules.scryfallLegalityKey) {
+        const legality = card.legalities?.[formatRules.scryfallLegalityKey];
+        if (legality !== 'legal' && legality !== 'restricted' && !isBasicLand(card.name)) {
+          validationWarnings.push(
+            `This card is not legal in ${formatRules.name}`
+          );
+        }
+      }
+
+      // 2. Check copy limit (by card name, not scryfall_id, to catch different printings)
+      const existingEntries = details.entries || [];
+      
+      // Fetch card data for all entries to match by card name (not scryfall_id)
+      // This ensures that different printings of the same card count against the copy limit
+      let entriesWithCardData = [];
+      if (existingEntries.length > 0) {
+        try {
+          const cardBatch = await authFetch('/cards/collection', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              identifiers: existingEntries.map(e => ({ id: e.scryfall_id })),
+            }),
+          });
+          if (cardBatch.ok) {
+            const { data: scCards } = await cardBatch.json();
+            entriesWithCardData = existingEntries.map(e => ({
+              ...e,
+              cardName: scCards.find(c => c.id === e.scryfall_id)?.name || null,
+            }));
+          } else {
+            entriesWithCardData = existingEntries;
+          }
+        } catch (err) {
+          console.error('Failed to fetch card data for copy limit check:', err);
+          entriesWithCardData = existingEntries;
+        }
+      }
+
+      // Count copies of this card by name (all printings)
+      const existingCopies = entriesWithCardData
+        .filter((e) => e.cardName === card.name)
+        .reduce((sum, e) => sum + (e.quantity || 1), 0);
+
+      if (
+        formatRules.maxCopies !== null &&
+        !isBasicLand(card.name) &&
+        existingCopies + 1 > formatRules.maxCopies
+      ) {
+        validationWarnings.push(
+          `Adding this card would exceed the ${formatRules.maxCopies}-copy limit for ${formatRules.name}`
+        );
+      }
+
+      // 3. Check color identity (Commander only)
+      // Note: Full color identity validation requires fetching the commander card data
+      // which would need an additional API call. This could be enhanced in future.
+      if (col.deck_type === 'COMMANDER') {
+        const commanderEntry = existingEntries.find((e) => e.is_commander);
+        if (commanderEntry) {
+          // Full validation would require fetching commander card data from Scryfall
+          // and comparing card.color_identity against commander.color_identity
+          // Skipped for now to avoid additional API call per card add
+        }
+      }
+
+      setWarnings(validationWarnings);
+    } catch (err) {
+      console.error('Failed to validate collection:', err);
+    } finally {
+      setLoadingCollectionDetails(false);
+    }
   };
 
   const collectionOptions = collections.map((c) => ({
@@ -181,6 +300,16 @@ const AddToCollectionModal = ({ open, onClose, scryfallId, cardName }) => {
                 placeholder="Select a collection"
               />
             </Form.Group>
+
+            {warnings.length > 0 && (
+              <Message type="warning" showIcon style={{ marginBottom: 16 }}>
+                <div>
+                  {warnings.map((warning, idx) => (
+                    <div key={idx}>{warning}</div>
+                  ))}
+                </div>
+              </Message>
+            )}
 
             <Form.Group>
               <Form.ControlLabel>Quantity</Form.ControlLabel>

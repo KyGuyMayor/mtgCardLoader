@@ -60,7 +60,7 @@ Collection {
   userId: UUID (FK to User)
   name: String
   type: Enum (TRADE_BINDER, DECK)
-  deckType: Enum (nullable) // Only for DECK type: COMMANDER, STANDARD, MODERN, LEGACY, VINTAGE, PIONEER, PAUPER, DRAFT, OTHER
+  deckType: Enum (nullable) // Only for DECK type: COMMANDER, STANDARD, PLANAR_STANDARD, MODERN, LEGACY, VINTAGE, PIONEER, PAUPER, DRAFT, OTHER
   description: String (nullable)
   createdAt: Timestamp
   updatedAt: Timestamp
@@ -104,7 +104,7 @@ CREATE TABLE users (
 );
 
 CREATE TYPE collection_type AS ENUM ('TRADE_BINDER', 'DECK');
-CREATE TYPE deck_type AS ENUM ('COMMANDER', 'STANDARD', 'MODERN', 'LEGACY', 'VINTAGE', 'PIONEER', 'PAUPER', 'DRAFT', 'OTHER');
+CREATE TYPE deck_type AS ENUM ('COMMANDER', 'STANDARD', 'PLANAR_STANDARD', 'MODERN', 'LEGACY', 'VINTAGE', 'PIONEER', 'PAUPER', 'DRAFT', 'OTHER');
 CREATE TYPE card_condition AS ENUM ('MINT', 'NM', 'LP', 'MP', 'HP', 'DAMAGED');
 
 CREATE TABLE collections (
@@ -165,7 +165,7 @@ CREATE INDEX idx_entries_scryfall_id ON collection_entries(scryfall_id);
 |----|-------------|-------|
 | CREATE-1 | Modal/page to create new collection | |
 | CREATE-2 | Select collection type: Trade Binder or Deck | |
-| CREATE-3 | If Deck: select deck type | Commander, Standard, Modern, Legacy, Vintage, Pioneer, Pauper, Draft, Other |
+| CREATE-3 | If Deck: select deck type | Commander, Standard, Planar Standard, Modern, Legacy, Vintage, Pioneer, Pauper, Draft, Other |
 | CREATE-4 | Enter collection name | Required |
 | CREATE-5 | Enter description | Optional |
 | CREATE-6 | Deck validation hints | e.g., Commander = 100 cards, Standard = 60+ cards |
@@ -331,6 +331,118 @@ CREATE INDEX idx_entries_scryfall_id ON collection_entries(scryfall_id);
 
 ---
 
+### 15. Deck Building Restrictions & Format Validation
+- **Status**: Not Implemented
+- **Priority**: High
+
+#### Overview
+Deck collections must enforce format-specific construction rules. When a user builds a deck in a given format (Standard, Modern, Commander, etc.), the system should validate the deck against that format's rules and surface violations so the user can correct them.
+
+#### Format Rules Summary
+
+| Format | Min Deck Size | Max Deck Size | Max Copies | Basic Land Exempt | Sideboard | Singleton | Commander Required | Scryfall Legality Key |
+|--------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|---|
+| Standard | 60 | — | 4 | Yes | 15 | No | No | `standard` |
+| Planar Standard | 60 | — | 4 | Yes | 15 | No | No | — (set-based) |
+| Modern | 60 | — | 4 | Yes | 15 | No | No | `modern` |
+| Pioneer | 60 | — | 4 | Yes | 15 | No | No | `pioneer` |
+| Legacy | 60 | — | 4 | Yes | 15 | No | No | `legacy` |
+| Vintage | 60 | — | 4 | Yes | 15 | No | No | `vintage` |
+| Pauper | 60 | — | 4 | Yes | 15 | No | No | `pauper` |
+| Commander | 100 | 100 | 1 | Yes | 0 | Yes | Yes | `commander` |
+| Draft | 40 | — | ∞ | Yes | ∞ | No | No | — (none) |
+| Other | — | — | — | — | — | — | — | — (no validation) |
+
+**Key rules:**
+- **Planar Standard** is a fan-managed format. It uses only "Universe Within" cards (no crossover IP sets) from the two most recent years of Standard releases (starting 2025), plus the Foundations set (always legal). Legality is determined by set code rather than a Scryfall legality key. Legal sets: `ecl` (Lorwyn Eclipsed), `eoe` (Edge of Eternities), `tdm` (Tarkir: Dragonstorm), `dft` (Aetherdrift), `fdn` (Foundations). Banned cards: "Cori-steel Cutter". Legal card pool can be verified with: `game:paper (set:ecl or set:eoe or set:tdm or set:dft or set:fdn) -name:"Cori-steel cutter"`.
+- **Basic lands** (Plains, Island, Swamp, Mountain, Forest, Wastes, and Snow-Covered variants) are exempt from copy limits in all formats.
+- **Vintage restricted cards** are limited to 1 copy (Scryfall legality value = `restricted`).
+- **Commander color identity**: all cards in a Commander deck must only use mana symbols that appear on the commander. Scryfall provides `color_identity` per card.
+- **Commander creature requirement**: the commander must be a Legendary Creature (or have "can be your commander" in oracle text).
+- **Sideboard**: 15-card maximum for constructed formats. Copy limits span main deck + sideboard combined.
+
+#### Requirements
+
+| ID | Requirement | Notes |
+|----|-------------|-------|
+| DV-1 | Centralized format rules configuration module | Single source of truth for all format rules, importable by backend and frontend |
+| DV-2 | `isBasicLand(cardName)` helper function | Returns true for Plains, Island, Swamp, Mountain, Forest, Wastes, Snow-Covered variants |
+| DV-3 | Backend validation endpoint: `GET /collections/:id/validate` | Returns `{ valid, errors[], warnings[] }` |
+| DV-4 | Validate deck size against format min/max | Sum of all entry quantities vs. minDeckSize / maxDeckSize |
+| DV-5 | Validate card copy limits | Group by oracle name, sum quantities, check vs. maxCopies; skip basic lands |
+| DV-6 | Validate format legality per card | Check `card.legalities[formatKey]` is `legal` or `restricted` via Scryfall data |
+| DV-6a | Validate Planar Standard legality by set code | Check `card.set` is in `legalSets` array and `card.name` is not in `bannedCards` list (no Scryfall legality key) |
+| DV-7 | Validate Commander: exactly one `is_commander=true` entry | Error if missing or multiple |
+| DV-8 | Validate Commander: commander is Legendary Creature | Check `type_line` or oracle text |
+| DV-9 | Validate Commander: color identity constraint | All cards' `color_identity` must be subset of commander's |
+| DV-10 | Validate Vintage restricted cards: max 1 copy | Cards with `legalities.vintage === 'restricted'` |
+| DV-11 | Validate sideboard size for constructed formats | Sideboard entries must not exceed `sideboardSize` |
+| DV-12 | Validate copy limits across main deck + sideboard combined | 4 total copies between both |
+| DV-13 | Frontend "Validate Deck" button on CollectionDetail | Only for DECK collections (not TRADE_BINDER) |
+| DV-14 | Display validation errors with card names and links | Clickable card names navigate to card detail |
+| DV-15 | Display validation warnings separately (yellow) | e.g., restricted cards in Vintage |
+| DV-16 | Inline warnings when adding cards via AddToCollectionModal | Soft/advisory — user can still add the card |
+| DV-17 | Check format legality before adding card | Show warning if card is banned/not legal in format |
+| DV-18 | Check copy limit before adding card | Show warning if adding would exceed limit |
+| DV-19 | Check Commander color identity before adding card | Show warning if card is outside commander's colors |
+| DV-20 | Legality status badge on Dashboard per deck | Green (legal), Red (errors), Gray (pending/empty) |
+| DV-21 | Highlight illegal cards in CollectionDetail table | Red-tinted rows for errors, yellow for warnings |
+| DV-22 | Violation tooltip on highlighted rows | Shows specific error message per card |
+| DV-23 | Main Deck vs Sideboard sections in CollectionDetail | Toggle/tab for constructed formats with sideboards |
+| DV-24 | Separate entry count badges: "Main: X / Sideboard: Y" | For formats with sideboards |
+
+#### Validation Error Types
+
+| Error Type | Description |
+|---|---|
+| `DECK_SIZE_MIN` | Deck has fewer cards than the format minimum |
+| `DECK_SIZE_MAX` | Deck has more cards than the format maximum (Commander) |
+| `COPY_LIMIT` | A non-basic-land card exceeds the allowed copy count |
+| `FORMAT_LEGALITY` | A card is not legal or is banned in the deck's format |
+| `COMMANDER_MISSING` | No card is designated as commander in a Commander deck |
+| `COMMANDER_INVALID` | The designated commander is not a valid legendary creature |
+| `COLOR_IDENTITY` | A card's color identity is not a subset of the commander's |
+| `RESTRICTED_LIMIT` | A Vintage-restricted card has more than 1 copy |
+| `SET_LEGALITY` | A card's set is not in the format's legal sets list (Planar Standard) |
+| `BANNED_CARD` | A card is on the format's banned cards list (Planar Standard) |
+| `SIDEBOARD_SIZE` | Sideboard exceeds the format's maximum sideboard size |
+
+#### Validation Response Schema
+```json
+{
+  "valid": false,
+  "errors": [
+    {
+      "type": "COPY_LIMIT",
+      "message": "Lightning Bolt has 5 copies (max 4 for Standard)",
+      "cards": [
+        { "name": "Lightning Bolt", "scryfall_id": "..." }
+      ]
+    }
+  ],
+  "warnings": [
+    {
+      "type": "RESTRICTED_LIMIT",
+      "message": "Black Lotus is restricted in Vintage (max 1 copy)",
+      "cards": [
+        { "name": "Black Lotus", "scryfall_id": "..." }
+      ]
+    }
+  ]
+}
+```
+
+#### Technical Notes
+- Scryfall `legalities` object has keys matching format names: `standard`, `modern`, `commander`, `legacy`, `vintage`, `pioneer`, `pauper`
+- Possible legality values: `legal`, `not_legal`, `restricted`, `banned`
+- Scryfall `color_identity` is an array of color letters: `["W", "U", "B", "R", "G"]`
+- Card data enrichment reuses existing `fetchCardsFromScryfall` helper (batch in 75s, rate-limited)
+- Validation is advisory in AddToCollectionModal (does not block adding) but explicit for the Validate button
+- Format rules module (`src/helpers/deckRules.js`) shared between backend and frontend
+- **Planar Standard** uses set-based validation (`card.set` in `legalSets`) instead of `legalities[key]`. The `legalSets` and `bannedCards` arrays are defined in the format rules config and will need updating as new sets release. The Scryfall card object includes `set` (set code, e.g., `"fdn"`) which is used for this check.
+
+---
+
 ## API Endpoints (New)
 
 ### Authentication
@@ -349,6 +461,7 @@ CREATE INDEX idx_entries_scryfall_id ON collection_entries(scryfall_id);
 | PUT | `/collections/:id` | Update collection metadata | Yes |
 | DELETE | `/collections/:id` | Delete collection and entries | Yes |
 | GET | `/collections/:id/stats` | Get collection statistics | Yes |
+| GET | `/collections/:id/validate` | Validate deck against format rules | Yes |
 
 ### Collection Entries
 | Method | Endpoint | Description | Auth |
@@ -408,6 +521,15 @@ CREATE INDEX idx_entries_scryfall_id ON collection_entries(scryfall_id);
 1. Collection statistics and charts
 2. Bulk operations
 
+### Phase 5: Deck Validation
+1. Deck format rules configuration module (`src/helpers/deckRules.js`)
+2. Backend validation endpoint (`GET /collections/:id/validate`)
+3. Frontend "Validate Deck" button and validation panel on CollectionDetail
+4. Inline format warnings in AddToCollectionModal
+5. Dashboard legality status badges
+6. Highlight illegal cards in CollectionDetail table rows
+7. Sideboard tracking with main deck / sideboard split and combined validation
+
 ---
 
 ## Success Metrics
@@ -423,6 +545,7 @@ CREATE INDEX idx_entries_scryfall_id ON collection_entries(scryfall_id);
 1. ~~Should we support multiple "collections" per user?~~ **Resolved: Yes** - Trade Binder and Decks with deck types
 2. ~~Should current market price be fetched and displayed alongside purchase price?~~ **Resolved: Yes** - See section 8
 3. ~~Import from other collection tools (Deckbox, Moxfield CSV)?~~ **Resolved: Yes** - See sections 12-13
+4. ~~Should decks enforce format-specific construction rules?~~ **Resolved: Yes** - See section 15. Validation uses Scryfall legality data.
 
 ---
 
