@@ -480,8 +480,8 @@ exports.validate = async (req, res) => {
       }
     });
 
-    // Validate main deck size
-    if (formatRules.minDeckSize !== null && mainDeckCount < formatRules.minDeckSize) {
+    // Validate main deck size (skip for Commander — handled in commander-specific section)
+    if (!formatRules.requiresCommander && formatRules.minDeckSize !== null && mainDeckCount < formatRules.minDeckSize) {
       errors.push({
         type: 'DECK_SIZE_MIN',
         message: `Main deck must have at least ${formatRules.minDeckSize} cards (currently ${mainDeckCount})`,
@@ -489,7 +489,7 @@ exports.validate = async (req, res) => {
       });
     }
 
-    if (formatRules.maxDeckSize !== null && mainDeckCount > formatRules.maxDeckSize) {
+    if (!formatRules.requiresCommander && formatRules.maxDeckSize !== null && mainDeckCount > formatRules.maxDeckSize) {
       errors.push({
         type: 'DECK_SIZE_MAX',
         message: `Main deck must not exceed ${formatRules.maxDeckSize} cards (currently ${mainDeckCount})`,
