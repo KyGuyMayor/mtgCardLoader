@@ -121,6 +121,10 @@ const CollectionDetail = () => {
   const [paginationProgress, setPaginationProgress] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [currentPageNum, setCurrentPageNum] = useState(1);
+  const [validationOpen, setValidationOpen] = useState(false);
+  const [validationLoading, setValidationLoading] = useState(false);
+  const [validationResult, setValidationResult] = useState(null);
+  const [validationRefreshKey, setValidationRefreshKey] = useState(0);
   const priceCacheRef = useRef({});
   const toaster = useToaster();
   const isMountedRef = useRef(true);
@@ -799,6 +803,48 @@ const CollectionDetail = () => {
     );
   };
 
+  const validateDeck = async () => {
+    setValidationLoading(true);
+    setValidationOpen(true);
+    
+    try {
+      const response = await authFetch(`/collections/${id}/validate`);
+      if (!isMountedRef.current) return;
+      
+      if (!response.ok) {
+        toaster.push(
+          <Message type="error" showIcon closable>
+            Failed to validate deck
+          </Message>,
+          { placement: 'topCenter' }
+        );
+        return;
+      }
+      
+      const result = await response.json();
+      if (isMountedRef.current) {
+        setValidationResult(result);
+      }
+    } catch (err) {
+      console.error('Validation error:', err);
+      toaster.push(
+        <Message type="error" showIcon closable>
+          Error validating deck
+        </Message>,
+        { placement: 'topCenter' }
+      );
+    } finally {
+      if (isMountedRef.current) {
+        setValidationLoading(false);
+      }
+    }
+  };
+
+  // Clear validation when table data changes
+  useEffect(() => {
+    setValidationResult(null);
+  }, [refreshKey]);
+
   if (loading) {
     return (
       <CustomProvider theme="dark">
@@ -875,6 +921,16 @@ const CollectionDetail = () => {
                     onClick={() => setExportModalOpen(true)}
                   >
                     Export CSV
+                  </Button>
+                )}
+                {collection.type === 'DECK' && tableData.length > 0 && (
+                  <Button
+                    size="xs"
+                    appearance="primary"
+                    onClick={validateDeck}
+                    loading={validationLoading}
+                  >
+                    Validate Deck
                   </Button>
                 )}
               </div>
@@ -969,6 +1025,119 @@ const CollectionDetail = () => {
               collectionName={collection?.name}
               entries={tableData}
             />
+
+            <Modal open={validationOpen} onClose={() => setValidationOpen(false)} size="lg">
+              <Modal.Header>
+                <Modal.Title>
+                  {collection?.deck_type} Deck Validation
+                </Modal.Title>
+              </Modal.Header>
+              <Modal.Body style={{ maxHeight: '70vh', overflow: 'auto' }}>
+                {validationLoading ? (
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
+                    <Loader center size="md" content="Validating deck..." />
+                  </div>
+                ) : validationResult ? (
+                  <>
+                    {validationResult.valid ? (
+                      <Message
+                        type="success"
+                        showIcon
+                        style={{ marginBottom: 16 }}
+                      >
+                        Deck is legal for {collection?.deck_type}!
+                      </Message>
+                    ) : null}
+
+                    {validationResult.errors && validationResult.errors.length > 0 && (
+                      <div style={{ marginBottom: 16 }}>
+                        <h5 style={{ marginBottom: 8, color: '#e74c3c' }}>Errors</h5>
+                        {validationResult.errors.map((error, idx) => (
+                          <Panel key={idx} style={{ marginBottom: 8 }} shaded>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                              <span style={{ color: '#e74c3c', fontSize: 18, flexShrink: 0 }}>✕</span>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 'bold', marginBottom: 4 }}>
+                                  {error.type}
+                                </div>
+                                <div style={{ marginBottom: 8, fontSize: 13 }}>
+                                  {error.message}
+                                </div>
+                                {error.cards && error.cards.length > 0 && (
+                                  <div style={{ fontSize: 12 }}>
+                                    Cards: {error.cards.map((card, cardIdx) => (
+                                      <span key={cardIdx}>
+                                        <a
+                                          href={`/cardsearch/${card.scryfall_id}`}
+                                          style={{ color: '#3498db', textDecoration: 'none' }}
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            navigate(`/cardsearch/${card.scryfall_id}`);
+                                          }}
+                                        >
+                                          {card.name}
+                                        </a>
+                                        {cardIdx < error.cards.length - 1 ? ', ' : ''}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </Panel>
+                        ))}
+                      </div>
+                    )}
+
+                    {validationResult.warnings && validationResult.warnings.length > 0 && (
+                      <div>
+                        <h5 style={{ marginBottom: 8, color: '#f39c12' }}>Warnings</h5>
+                        {validationResult.warnings.map((warning, idx) => (
+                          <Panel key={idx} style={{ marginBottom: 8 }} shaded>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                              <span style={{ color: '#f39c12', fontSize: 18, flexShrink: 0 }}>⚠</span>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 'bold', marginBottom: 4 }}>
+                                  {warning.type}
+                                </div>
+                                <div style={{ marginBottom: 8, fontSize: 13 }}>
+                                  {warning.message}
+                                </div>
+                                {warning.cards && warning.cards.length > 0 && (
+                                  <div style={{ fontSize: 12 }}>
+                                    Cards: {warning.cards.map((card, cardIdx) => (
+                                      <span key={cardIdx}>
+                                        <a
+                                          href={`/cardsearch/${card.scryfall_id}`}
+                                          style={{ color: '#3498db', textDecoration: 'none' }}
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            navigate(`/cardsearch/${card.scryfall_id}`);
+                                          }}
+                                        >
+                                          {card.name}
+                                        </a>
+                                        {cardIdx < warning.cards.length - 1 ? ', ' : ''}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </Panel>
+                        ))}
+                      </div>
+                    )}
+
+                    {!validationResult.valid && (!validationResult.errors || validationResult.errors.length === 0) && (
+                      <Message type="error" showIcon>
+                        Deck validation failed
+                      </Message>
+                    )}
+                  </>
+                ) : null}
+              </Modal.Body>
+            </Modal>
           </div>
         </Content>
       </Container>

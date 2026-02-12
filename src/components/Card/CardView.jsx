@@ -194,6 +194,7 @@ const CardView = () => {
               onClose={() => setShowAddModal(false)}
               scryfallId={card.id}
               cardName={card.name}
+              card={card}
             />
           )}
         </Content>
