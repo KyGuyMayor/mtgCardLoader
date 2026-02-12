@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   Container,
   Content,
@@ -10,6 +10,8 @@ import {
   Modal,
   FlexboxGrid,
   Loader,
+  Tooltip,
+  Whisper,
 } from 'rsuite';
 import { useNavigate } from 'react-router-dom';
 import { isMobile } from 'react-device-detect';
@@ -55,6 +57,12 @@ const COLORS = {
   muted: '#aaa',
 };
 
+const STATUS_COLORS = {
+  pending: '#6c757d',
+  valid: '#28a745',
+  invalid: '#dc3545',
+};
+
 const Dashboard = () => {
   const [collections, setCollections] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -63,6 +71,9 @@ const Dashboard = () => {
   const [deleting, setDeleting] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [validationCache, setValidationCache] = useState({});
+  const validatingRef = useRef(new Set());
+  const isMountedRef = useRef(true);
 
   const navigate = useNavigate();
 
@@ -89,6 +100,70 @@ const Dashboard = () => {
   useEffect(() => {
     fetchCollections();
   }, []);
+
+  // Validate DECK collections sequentially when collections load or change
+  useEffect(() => {
+    if (collections.length === 0) return;
+  
+    const validateDecks = async () => {
+      for (const collection of collections) {
+        // Only validate DECK type, not TRADE_BINDER or OTHER format
+        if (collection.type !== 'DECK' || collection.deck_type === 'OTHER') {
+          continue;
+        }
+  
+        // Skip if already validating or already cached
+        if (validatingRef.current.has(collection.id) || validationCache[collection.id]) {
+          continue;
+        }
+  
+        // Mark as validating
+        validatingRef.current.add(collection.id);
+  
+        try {
+          const response = await authFetch(`/collections/${collection.id}/validate`);
+          if (response.ok) {
+            const data = await response.json();
+            if (isMountedRef.current) {
+              setValidationCache(prev => ({
+                ...prev,
+                [collection.id]: data,
+              }));
+            }
+          } else {
+            // Set error state for failed validation (server error, not network failure)
+            if (isMountedRef.current) {
+              setValidationCache(prev => ({
+                ...prev,
+                [collection.id]: { valid: false, errors: [], warnings: [] },
+              }));
+            }
+          }
+        } catch (err) {
+          console.error(`Failed to validate collection ${collection.id}:`, err);
+          // Set distinct error state on network failure
+          if (isMountedRef.current) {
+            setValidationCache(prev => ({
+              ...prev,
+              [collection.id]: { error: true },
+            }));
+          }
+        } finally {
+          validatingRef.current.delete(collection.id);
+        }
+  
+        // Small delay between sequential validations to avoid overwhelming the server
+        await new Promise(r => setTimeout(r, 100));
+      }
+    };
+  
+    validateDecks();
+  
+    return () => {
+      isMountedRef.current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collections]);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -125,6 +200,161 @@ const Dashboard = () => {
       {BADGE_LABELS[type]}
     </span>
   );
+
+  const legalityBadge = (collection) => {
+    // Only show badge for DECK type, not OTHER format
+    if (collection.type !== 'DECK' || collection.deck_type === 'OTHER') {
+      return null;
+    }
+  
+    const validation = validationCache[collection.id];
+  
+    // Not yet validated (pending)
+    if (!validation) {
+      return (
+        <Whisper
+          placement="top"
+          trigger="hover"
+          speaker={<Tooltip>Checking deck validity...</Tooltip>}
+        >
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 20,
+              height: 20,
+              borderRadius: '50%',
+              backgroundColor: STATUS_COLORS.pending,
+              color: '#fff',
+              fontSize: 12,
+              fontWeight: 'bold',
+              marginLeft: SPACING.badgeMarginLeft,
+            }}
+          >
+            ?
+          </span>
+        </Whisper>
+      );
+    }
+  
+    // Validation error (network failure or server error)
+    if (validation.error) {
+      return (
+        <Whisper
+          placement="top"
+          trigger="hover"
+          speaker={<Tooltip>Unable to validate deck</Tooltip>}
+        >
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 20,
+              height: 20,
+              borderRadius: '50%',
+              backgroundColor: STATUS_COLORS.pending,
+              color: '#fff',
+              fontSize: 12,
+              fontWeight: 'bold',
+              marginLeft: SPACING.badgeMarginLeft,
+            }}
+          >
+            ?
+          </span>
+        </Whisper>
+      );
+    }
+  
+    // Empty deck check
+    if (collection.card_count === 0) {
+      return (
+        <Whisper
+          placement="top"
+          trigger="hover"
+          speaker={<Tooltip>Collection is empty</Tooltip>}
+        >
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 20,
+              height: 20,
+              borderRadius: '50%',
+              backgroundColor: STATUS_COLORS.pending,
+              color: '#fff',
+              fontSize: 12,
+              fontWeight: 'bold',
+              marginLeft: SPACING.badgeMarginLeft,
+            }}
+          >
+            ?
+          </span>
+        </Whisper>
+      );
+    }
+  
+    // Valid deck
+    if (validation.valid) {
+      return (
+        <Whisper
+          placement="top"
+          trigger="hover"
+          speaker={<Tooltip>Legal</Tooltip>}
+        >
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 20,
+              height: 20,
+              borderRadius: '50%',
+              backgroundColor: STATUS_COLORS.valid,
+              color: '#fff',
+              fontSize: 14,
+              fontWeight: 'bold',
+              marginLeft: SPACING.badgeMarginLeft,
+            }}
+          >
+            ✓
+          </span>
+        </Whisper>
+      );
+    }
+  
+    // Invalid deck (has errors)
+    const totalIssues = (validation.errors?.length || 0) + (validation.warnings?.length || 0);
+    const tooltipText = totalIssues === 1 ? '1 issue found' : `${totalIssues} issues found`;
+  
+    return (
+      <Whisper
+        placement="top"
+        trigger="hover"
+        speaker={<Tooltip>{tooltipText}</Tooltip>}
+      >
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 20,
+            height: 20,
+            borderRadius: '50%',
+            backgroundColor: STATUS_COLORS.invalid,
+            color: '#fff',
+            fontSize: 14,
+            fontWeight: 'bold',
+            marginLeft: SPACING.badgeMarginLeft,
+          }}
+        >
+          ✕
+        </span>
+      </Whisper>
+    );
+  };
 
   const styles = {
     container: {
@@ -221,12 +451,20 @@ const Dashboard = () => {
                           {collection.deck_type && (
                             <span
                               style={{
+                                display: 'flex',
+                                alignItems: 'center',
                                 marginLeft: SPACING.badgeMarginLeft,
-                                fontSize: FONT.deckType,
-                                color: COLORS.muted,
                               }}
                             >
-                              {collection.deck_type}
+                              <span
+                                style={{
+                                  fontSize: FONT.deckType,
+                                  color: COLORS.muted,
+                                }}
+                              >
+                                {collection.deck_type}
+                              </span>
+                              {legalityBadge(collection)}
                             </span>
                           )}
                         </div>
