@@ -14,6 +14,8 @@ import {
   useToaster,
   Panel,
   Progress,
+  Tooltip,
+  Whisper,
 } from 'rsuite';
 import { ArrowDown } from '@rsuite/icons';
 
@@ -22,6 +24,7 @@ import EditEntryModal from './EditEntryModal';
 import CollectionFilters from './CollectionFilters';
 import ExportCSVModal from './ExportCSVModal';
 import authFetch from '../../helpers/authFetch';
+import './CollectionDetail.css';
 
 const { Column, HeaderCell, Cell } = Table;
 
@@ -95,6 +98,53 @@ const desktopColumns = [
 
 const quantityColumn = { key: 'quantity', label: 'Quantity', width: 90, sortable: true };
 
+const NameCell = ({ rowData, errorMap, warningMap, ...props }) => {
+  const scryfallId = rowData?.scryfall_id;
+  const error = scryfallId ? errorMap[scryfallId] : null;
+  const warning = scryfallId ? warningMap[scryfallId] : null;
+  const violation = error || warning;
+
+  return (
+    <Cell {...props}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {violation && (
+          <Whisper
+            placement="top"
+            controlId={`violation-${scryfallId}`}
+            speaker={
+              <Tooltip>
+                <div style={{ maxWidth: 250 }}>
+                  <strong>{violation.type}:</strong> {violation.message}
+                </div>
+              </Tooltip>
+            }
+          >
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 18,
+                height: 18,
+                borderRadius: '50%',
+                backgroundColor: error ? '#e74c3c' : '#f39c12',
+                color: '#fff',
+                fontSize: 12,
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                flexShrink: 0,
+              }}
+            >
+              {error ? '✕' : '⚠'}
+            </span>
+          </Whisper>
+        )}
+        <span>{rowData?.name || 'Unknown Card'}</span>
+      </div>
+    </Cell>
+  );
+};
+
 const CollectionDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -124,7 +174,6 @@ const CollectionDetail = () => {
   const [validationOpen, setValidationOpen] = useState(false);
   const [validationLoading, setValidationLoading] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
-  const [validationRefreshKey, setValidationRefreshKey] = useState(0);
   const priceCacheRef = useRef({});
   const toaster = useToaster();
   const isMountedRef = useRef(true);
@@ -319,12 +368,12 @@ const CollectionDetail = () => {
         if (isMountedRef.current) setError('Unable to connect to server');
       } finally {
         // Ensure loading is hidden if error occurred before first page was displayed
-        if (isMountedRef.current && loading) setLoading(false);
+        if (isMountedRef.current) setLoading(false);
       }
     };
 
     fetchCollection();
-  }, [id, refreshKey]);
+  }, [id, refreshKey, toaster]);
 
   const filteredData = useMemo(() => {
     let data = tableData;
@@ -487,6 +536,48 @@ const CollectionDetail = () => {
     const col = allColumns.find((c) => (c.sortKey || c.key) === sortColumn);
     return col ? col.key : sortColumn;
   }, [sortColumn, allColumns]);
+
+  // Build maps of scryfall_id -> error/warning info for highlighting
+  const validationHighlights = useMemo(() => {
+    const errorMap = {}; // scryfall_id -> { type, message }
+    const warningMap = {}; // scryfall_id -> { type, message }
+
+    if (!validationResult) {
+      return { errorMap, warningMap };
+    }
+
+    if (validationResult.errors && Array.isArray(validationResult.errors)) {
+      validationResult.errors.forEach((error) => {
+        if (error.cards && Array.isArray(error.cards)) {
+          error.cards.forEach((card) => {
+            if (card.scryfall_id) {
+              errorMap[card.scryfall_id] = {
+                type: error.type,
+                message: error.message,
+              };
+            }
+          });
+        }
+      });
+    }
+
+    if (validationResult.warnings && Array.isArray(validationResult.warnings)) {
+      validationResult.warnings.forEach((warning) => {
+        if (warning.cards && Array.isArray(warning.cards)) {
+          warning.cards.forEach((card) => {
+            if (card.scryfall_id) {
+              warningMap[card.scryfall_id] = {
+                type: warning.type,
+                message: warning.message,
+              };
+            }
+          });
+        }
+      });
+    }
+
+    return { errorMap, warningMap };
+  }, [validationResult]);
 
   const priceSummary = useMemo(() => {
     if (tableData.length === 0) {
@@ -969,28 +1060,41 @@ const CollectionDetail = () => {
                 <p>Add cards from card pages to start building your collection.</p>
               </div>
             ) : (
-              <Table
-                loading={cardLoading}
-                data={sortedData}
-                height={window.innerHeight - 250}
-                onRowClick={handleRowClick}
-                virtualized
-                rowHeight={46}
-                sortColumn={displaySortColumn}
-                sortType={sortType}
-                onSortColumn={handleSortColumn}
-              >
-                {columns.map(({ key, label, custom, sortKey, ...rest }) => (
-                  <Column {...rest} key={key}>
-                    <HeaderCell>{label}</HeaderCell>
-                    {custom === 'actions'
-                      ? <ActionsCell dataKey={key} />
-                      : custom
-                        ? <GainLossCell dataKey={key} />
-                        : <Cell dataKey={key} />}
-                  </Column>
-                ))}
-              </Table>
+               <Table
+                 loading={cardLoading}
+                 data={sortedData}
+                 height={window.innerHeight - 250}
+                 onRowClick={handleRowClick}
+                 virtualized
+                 rowHeight={46}
+                 sortColumn={displaySortColumn}
+                 sortType={sortType}
+                 onSortColumn={handleSortColumn}
+                 rowClassName={(rowData) => {
+                   const { errorMap, warningMap } = validationHighlights;
+                   const scryfallId = rowData?.scryfall_id;
+                   if (scryfallId && errorMap[scryfallId]) {
+                     return 'violation-error-row';
+                   }
+                   if (scryfallId && warningMap[scryfallId]) {
+                     return 'violation-warning-row';
+                   }
+                   return '';
+                 }}
+               >
+                 {columns.map(({ key, label, custom, sortKey, ...rest }) => (
+                   <Column {...rest} key={key}>
+                     <HeaderCell>{label}</HeaderCell>
+                     {custom === 'actions'
+                       ? <ActionsCell dataKey={key} />
+                       : custom
+                         ? <GainLossCell dataKey={key} />
+                         : key === 'name'
+                           ? <NameCell dataKey={key} errorMap={validationHighlights.errorMap} warningMap={validationHighlights.warningMap} />
+                           : <Cell dataKey={key} />}
+                   </Column>
+                 ))}
+               </Table>
             )}
 
             <EditEntryModal
