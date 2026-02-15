@@ -10,6 +10,7 @@ import {
   Message,
   Badge,
   Button,
+  ButtonGroup,
   Modal,
   useToaster,
   Panel,
@@ -24,6 +25,7 @@ import EditEntryModal from './EditEntryModal';
 import CollectionFilters from './CollectionFilters';
 import ExportCSVModal from './ExportCSVModal';
 import authFetch from '../../helpers/authFetch';
+import { DECK_FORMAT_RULES } from '../../helpers/deckRules';
 import './CollectionDetail.css';
 
 const { Column, HeaderCell, Cell } = Table;
@@ -174,6 +176,7 @@ const CollectionDetail = () => {
   const [validationOpen, setValidationOpen] = useState(false);
   const [validationLoading, setValidationLoading] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
+  const [deckSection, setDeckSection] = useState('all');
   const priceCacheRef = useRef({});
   const toaster = useToaster();
   const isMountedRef = useRef(true);
@@ -181,6 +184,12 @@ const CollectionDetail = () => {
   useEffect(() => {
     return () => { isMountedRef.current = false; };
   }, []);
+
+  const formatRules = collection ? DECK_FORMAT_RULES[collection.deck_type] : null;
+  const hasSideboard = collection?.type === 'DECK' && formatRules?.sideboardSize != null && formatRules?.sideboardSize > 0;
+
+  const mainDeckCards = tableData.filter(e => !e.is_sideboard).reduce((sum, e) => sum + (e.quantity || 0), 0);
+  const sideboardCards = tableData.filter(e => e.is_sideboard).reduce((sum, e) => sum + (e.quantity || 0), 0);
 
   const enrichEntries = (entries, cards) => entries.map((entry, idx) => {
     const card = cards[idx];
@@ -378,6 +387,14 @@ const CollectionDetail = () => {
   const filteredData = useMemo(() => {
     let data = tableData;
 
+    if (hasSideboard) {
+      if (deckSection === 'main') {
+        data = data.filter((row) => !row.is_sideboard);
+      } else if (deckSection === 'side') {
+        data = data.filter((row) => row.is_sideboard);
+      }
+    }
+
     if (nameSearch) {
       const term = nameSearch.toLowerCase();
       data = data.filter((row) => row.name.toLowerCase().includes(term));
@@ -403,7 +420,7 @@ const CollectionDetail = () => {
     }
 
     return data;
-  }, [tableData, nameSearch, colorFilter, rarityFilter, conditionFilter]);
+  }, [tableData, nameSearch, colorFilter, rarityFilter, conditionFilter, deckSection, hasSideboard]);
 
   const stats = useMemo(() => {
     if (tableData.length === 0) {
@@ -624,6 +641,7 @@ const CollectionDetail = () => {
     setConditionFilter([]);
     setSortColumn(null);
     setSortType(null);
+    setDeckSection('all');
   };
 
   const handleRowClick = (rowData) => {
@@ -759,7 +777,7 @@ const CollectionDetail = () => {
         bordered
         header={
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h4 style={{ margin: 0 }}>Collection Statistics</h4>
+            <h4 style={{ margin: 0 }}>{hasSideboard ? 'Deck Statistics' : 'Collection Statistics'}</h4>
             <Button
               size="xs"
               appearance="subtle"
@@ -772,6 +790,12 @@ const CollectionDetail = () => {
         }
       >
         {statsExpanded && (
+        <>
+        {hasSideboard && sideboardCards > 0 && (
+          <div style={{ fontSize: 13, marginBottom: 12, padding: '8px 12px', backgroundColor: '#333', borderRadius: 4 }}>
+            Main Deck: <strong>{mainDeckCards}</strong> cards | Sideboard: <strong>{sideboardCards}</strong> cards
+          </div>
+        )}
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 24, padding: '12px 0' }}>
           {/* Color Breakdown */}
           <div>
@@ -889,6 +913,7 @@ const CollectionDetail = () => {
             </div>
           )}
         </div>
+        </>
         )}
       </Panel>
     );
@@ -987,7 +1012,14 @@ const CollectionDetail = () => {
               )}
               <div style={{ display: 'flex', gap: SPACING.statsGap, flexWrap: 'wrap', alignItems: 'center' }}>
                <Badge content={`${collection.pagination?.total || collection.entries?.length || 0} entries`} />
-               <Badge content={`${tableData.reduce((sum, e) => sum + (e.quantity || 0), 0)} total cards`} />
+               {hasSideboard ? (
+                 <>
+                   <Badge content={`Main: ${mainDeckCards}`} />
+                   <Badge content={`Sideboard: ${sideboardCards}`} />
+                 </>
+               ) : (
+                 <Badge content={`${tableData.reduce((sum, e) => sum + (e.quantity || 0), 0)} total cards`} />
+               )}
                 {(priceLoading || cardLoading) && (
                   <span style={{ fontSize: 13, color: COLORS.muted }}>
                     {totalPages > 1 && currentPageNum > 0 ? (
@@ -1050,6 +1082,34 @@ const CollectionDetail = () => {
                 totalCount={tableData.length}
                 filteredCount={sortedData.length}
               />
+            )}
+
+            {hasSideboard && (
+              <div style={{ marginBottom: 16 }}>
+                <ButtonGroup>
+                  <Button
+                    appearance={deckSection === 'all' ? 'primary' : 'default'}
+                    size="sm"
+                    onClick={() => setDeckSection('all')}
+                  >
+                    All
+                  </Button>
+                  <Button
+                    appearance={deckSection === 'main' ? 'primary' : 'default'}
+                    size="sm"
+                    onClick={() => setDeckSection('main')}
+                  >
+                    Main Deck ({mainDeckCards})
+                  </Button>
+                  <Button
+                    appearance={deckSection === 'side' ? 'primary' : 'default'}
+                    size="sm"
+                    onClick={() => setDeckSection('side')}
+                  >
+                    Sideboard ({sideboardCards})
+                  </Button>
+                </ButtonGroup>
+              </div>
             )}
 
             {renderStatsSection()}

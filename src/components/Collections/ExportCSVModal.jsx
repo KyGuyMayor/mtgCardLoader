@@ -11,7 +11,7 @@ const FORMAT_MOXFIELD = 'moxfield';
 
 const DECKBOX_HEADERS = ['Count', 'Name', 'Edition', 'Condition', 'Language', 'Foil', 'Tags', 'My Price'];
 
-const MOXFIELD_HEADERS = ['Count', 'Name', 'Edition', 'Condition', 'Purchase Price'];
+const MOXFIELD_HEADERS = ['Count', 'Name', 'Edition', 'Condition', 'Purchase Price', 'Section'];
 
 function escapeCSV(value) {
   const str = value == null ? '' : String(value);
@@ -58,7 +58,7 @@ function buildCSV(entries, format) {
         escapeCSV(mapConditionDeckbox(entry.condition)),
         'English',
         '',
-        '',
+        entry.is_sideboard ? 'Sideboard' : '',
         entry.purchase_price_raw != null ? entry.purchase_price_raw.toFixed(2) : '',
       ].join(','));
     });
@@ -71,6 +71,7 @@ function buildCSV(entries, format) {
         escapeCSV(entry.set_name || ''),
         escapeCSV(mapConditionMoxfield(entry.condition)),
         entry.purchase_price_raw != null ? entry.purchase_price_raw.toFixed(2) : '',
+        entry.is_sideboard ? 'sideboard' : 'mainboard',
       ].join(','));
     });
   }
