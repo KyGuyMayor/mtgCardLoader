@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Content, CustomProvider, InputGroup } from 'rsuite';
+import { Content, CustomProvider } from 'rsuite';
 
 import NavigationBar from '../Shared/NavigationBar';
 import SearchBar from '../Shared/SearchBar';
@@ -22,20 +22,19 @@ const SetSearch = () => {
     }
   };
 
-  const styles = {
+  const wrapperStyles = {
     width: '95%',
     marginLeft: 'auto',
-    marginRight: 'auto',
-    border: 'none'
+    marginRight: 'auto'
   }
 
    return (
     <CustomProvider theme="dark">
       <NavigationBar />
       <Content style={{ marginTop: "15px" }}>
-        <InputGroup styles={styles}>
+        <div style={wrapperStyles}>
           <SearchBar term={term} retrieve={search} setTerm={setTerm} onSelect={goToSet} placeholder={'Enter a Set Name. Minimum 3 characters to search'} />
-        </InputGroup>
+        </div>
       </Content>
     </CustomProvider>
   );

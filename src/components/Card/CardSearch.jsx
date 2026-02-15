@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Container, Content, CustomProvider, InputGroup, Heading } from 'rsuite';
+import { Container, Content, CustomProvider, Heading } from 'rsuite';
 
 import NavigationBar from '../Shared/NavigationBar';
 import SearchBar from '../Shared/SearchBar';
@@ -22,11 +22,10 @@ const CardSearch = () => {
     }
   };
 
-  const styles = {
+  const wrapperStyles = {
     width: '95%',
     marginLeft: 'auto',
-    marginRight: 'auto',
-    border: 'none'
+    marginRight: 'auto'
   }
 
   return (
@@ -35,9 +34,9 @@ const CardSearch = () => {
       <Container>
         <Heading align="center" level={3}>Card Search</Heading>
         <Content style={{ marginTop: "15px" }}>
-          <InputGroup style={styles}>
+          <div style={wrapperStyles}>
             <SearchBar term={term} retrieve={search} setTerm={setTerm} onSelect={goToCard} placeholder={'Enter a Card Name. Minimum 3 characters to search'} />
-          </InputGroup>
+          </div>
         </Content>
       </Container>
     </CustomProvider>

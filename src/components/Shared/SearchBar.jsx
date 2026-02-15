@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AutoComplete, InputGroup, Badge } from 'rsuite';
+import { AutoComplete, Badge } from 'rsuite';
 
 /**
  * Check if a card is double-faced (transform, modal DFC, etc.)
@@ -83,15 +83,13 @@ const SearchBar = (props) => {
   };
 
   return (
-    <InputGroup>
-      <AutoComplete
-        placeholder={placeholder}
-        data={data}
-        onChange={setTerm}
-        onSelect={handleSelect}
-        renderMenuItem={renderMenuItem}
-      />
-    </InputGroup>
+    <AutoComplete
+      placeholder={placeholder}
+      data={data}
+      onChange={setTerm}
+      onSelect={handleSelect}
+      renderMenuItem={renderMenuItem}
+    />
   );
 }
 
