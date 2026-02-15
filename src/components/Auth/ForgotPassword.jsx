@@ -1,43 +1,38 @@
 import React, { useState } from 'react';
 import { Container, Content, CustomProvider, Form, Button, Panel, Message } from 'rsuite';
-import { useNavigate, Link } from 'react-router-dom';
 
 import NavigationBar from '../Shared/NavigationBar';
-import { useAuth } from './AuthContext';
 
-const Login = () => {
+const ForgotPassword = () => {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
-  const { login } = useAuth();
 
   const handleSubmit = async () => {
     setError('');
+    setSuccess('');
 
-    if (!email || !password) {
-      setError('Email and password are required');
+    if (!email) {
+      setError('Email is required');
       return;
     }
 
     setLoading(true);
     try {
-      const response = await fetch('/auth/login', {
+      const response = await fetch('/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email }),
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        setError(data.error || 'Invalid credentials');
+        const data = await response.json();
+        setError(data.error || 'Something went wrong');
         return;
       }
 
-      login(data.token);
-      navigate('/collections');
+      setSuccess('If an account with that email exists, a reset link has been sent.');
     } catch (err) {
       setError('Unable to connect to server');
     } finally {
@@ -57,10 +52,15 @@ const Login = () => {
       <NavigationBar />
       <Container>
         <Content>
-          <Panel header="Login" bordered style={styles.panel}>
+          <Panel header="Forgot Password" bordered style={styles.panel}>
             {error && (
               <Message type="error" showIcon style={{ marginBottom: 16 }}>
                 {error}
+              </Message>
+            )}
+            {success && (
+              <Message type="success" showIcon style={{ marginBottom: 16 }}>
+                {success}
               </Message>
             )}
             <Form fluid>
@@ -75,31 +75,18 @@ const Login = () => {
                 />
               </Form.Group>
               <Form.Group>
-                <Form.ControlLabel>Password</Form.ControlLabel>
-                <Form.Control
-                  name="password"
-                  type="password"
-                  value={password}
-                  onChange={setPassword}
-                  placeholder="Enter your password"
-                />
-              </Form.Group>
-              <Form.Group>
                 <Button
                   appearance="primary"
                   block
                   loading={loading}
                   onClick={handleSubmit}
                 >
-                  Login
+                  Send Reset Link
                 </Button>
               </Form.Group>
             </Form>
-            <p style={{ marginTop: 12, textAlign: 'center' }}>
-              <Link to="/forgot-password">Forgot Password?</Link>
-            </p>
             <p style={{ marginTop: 16, textAlign: 'center' }}>
-              Don't have an account? <Link to="/register">Register here</Link>
+              Remember your password? <a href="/login">Login here</a>
             </p>
           </Panel>
         </Content>
@@ -108,4 +95,4 @@ const Login = () => {
   );
 };
 
-export default Login;
+export default ForgotPassword;
