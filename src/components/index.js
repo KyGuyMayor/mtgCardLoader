@@ -7,6 +7,8 @@ export { default as NavigationBar } from "./Shared/NavigationBar";
 export { default as SearchBar } from "./Shared/SearchBar";
 export { default as Login } from "./Auth/Login";
 export { default as Register } from "./Auth/Register";
+export { default as ForgotPassword } from "./Auth/ForgotPassword";
+export { default as ResetPassword } from "./Auth/ResetPassword";
 export { AuthProvider, useAuth } from "./Auth/AuthContext";
 export { default as ProtectedRoute } from "./Auth/ProtectedRoute";
 export { default as CollectionsDashboard } from "./Collections/Dashboard";
