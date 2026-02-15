@@ -1,0 +1,6 @@
+.violation-error-row {
+  background-color: rgba(231, 76, 60, 0.1) !important;
+}
+.violation-warning-row {
+  background-color: rgba(243, 156, 18, 0.1) !important;
+}
