@@ -83,6 +83,12 @@ const CONDITION_ORDER = {
   'DAMAGED': 5,
 };
 
+const FINISH_ORDER = {
+  'nonfoil': 0,
+  'foil': 1,
+  'etched': 2,
+};
+
 const defaultColumns = [
   { key: 'name', label: 'Name', fixed: true, flexGrow: 2, sortable: true },
   { key: 'type_line', label: 'Type', flexGrow: 1, sortable: true },
@@ -92,6 +98,7 @@ const desktopColumns = [
   { key: 'rarity', label: 'Rarity', flexGrow: 1, sortable: true },
   { key: 'colors', label: 'Colors', flexGrow: 1 },
   { key: 'set_name', label: 'Set', flexGrow: 1 },
+  { key: 'finish', label: 'Finish', flexGrow: 0.8, sortable: true },
   { key: 'purchase_price_display', label: 'Purchase Price', flexGrow: 1, sortable: true, sortKey: 'purchase_price_raw' },
   { key: 'current_price', label: 'Current Price', flexGrow: 1, sortable: true, sortKey: 'current_price_raw' },
   { key: 'gain_loss', label: 'Gain/Loss', flexGrow: 1, custom: true },
@@ -99,6 +106,29 @@ const desktopColumns = [
 ];
 
 const quantityColumn = { key: 'quantity', label: 'Quantity', width: 90, sortable: true };
+
+const FINISH_LABELS = {
+  'nonfoil': 'Non-Foil',
+  'foil': 'Foil',
+  'etched': 'Etched',
+};
+
+const FINISH_COLORS = {
+  'nonfoil': '#aaa',
+  'foil': '#f39c12',
+  'etched': '#9b59b6',
+};
+
+const FinishCell = ({ rowData, ...props }) => {
+  const finish = rowData?.finish || 'nonfoil';
+  const label = FINISH_LABELS[finish] || 'Non-Foil';
+  const color = FINISH_COLORS[finish] || '#aaa';
+  return (
+    <Cell {...props}>
+      <span style={{ color }}>{label}</span>
+    </Cell>
+  );
+};
 
 const NameCell = ({ rowData, errorMap, warningMap, ...props }) => {
   const scryfallId = rowData?.scryfall_id;
@@ -193,7 +223,18 @@ const CollectionDetail = () => {
 
   const enrichEntries = (entries, cards) => entries.map((entry, idx) => {
     const card = cards[idx];
-    const usdPrice = card?.prices?.usd || card?.prices?.usd_foil || null;
+    const finish = entry.finish || 'nonfoil';
+    
+    // Select price based on finish
+    let usdPrice;
+    if (finish === 'foil') {
+      usdPrice = card?.prices?.usd_foil || card?.prices?.usd || null;
+    } else if (finish === 'etched') {
+      usdPrice = card?.prices?.usd_etched || card?.prices?.usd || null;
+    } else {
+      usdPrice = card?.prices?.usd || null;
+    }
+    
     const currentRaw = usdPrice ? Number(usdPrice) : null;
     const purchaseRaw = entry.purchase_price != null ? Number(entry.purchase_price) : null;
     const gainLossRaw = (purchaseRaw != null && currentRaw != null)
@@ -533,6 +574,12 @@ const CollectionDetail = () => {
       if (sortColumn === 'condition') {
         const aRank = CONDITION_ORDER[aVal] ?? 99;
         const bRank = CONDITION_ORDER[bVal] ?? 99;
+        return sortType === 'asc' ? aRank - bRank : bRank - aRank;
+      }
+
+      if (sortColumn === 'finish') {
+        const aRank = FINISH_ORDER[aVal || 'nonfoil'] ?? 99;
+        const bRank = FINISH_ORDER[bVal || 'nonfoil'] ?? 99;
         return sortType === 'asc' ? aRank - bRank : bRank - aRank;
       }
 
@@ -1151,7 +1198,9 @@ const CollectionDetail = () => {
                          ? <GainLossCell dataKey={key} />
                          : key === 'name'
                            ? <NameCell dataKey={key} errorMap={validationHighlights.errorMap} warningMap={validationHighlights.warningMap} />
-                           : <Cell dataKey={key} />}
+                           : key === 'finish'
+                             ? <FinishCell dataKey={key} />
+                             : <Cell dataKey={key} />}
                    </Column>
                  ))}
                </Table>

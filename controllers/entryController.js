@@ -1,6 +1,7 @@
 const db = require('../src/db');
 
 const VALID_CONDITIONS = ['MINT', 'NM', 'LP', 'MP', 'HP', 'DAMAGED'];
+const VALID_FINISHES = ['nonfoil', 'foil', 'etched'];
 
 class CollectionError extends Error {
   constructor(status, message) {
@@ -26,7 +27,7 @@ async function findCollectionOrFail(id, user_id) {
 exports.create = async (req, res) => {
   const user_id = req.user.id;
   const { id } = req.params;
-  const { scryfall_id, quantity, condition, purchase_price, notes, is_commander, is_sideboard } = req.body;
+  const { scryfall_id, quantity, condition, purchase_price, notes, is_commander, is_sideboard, finish } = req.body;
 
   if (!scryfall_id) {
     return res.status(400).json({ error: 'scryfall_id is required' });
@@ -34,6 +35,10 @@ exports.create = async (req, res) => {
 
   if (condition && !VALID_CONDITIONS.includes(condition)) {
     return res.status(400).json({ error: `condition must be one of: ${VALID_CONDITIONS.join(', ')}` });
+  }
+
+  if (finish && !VALID_FINISHES.includes(finish)) {
+    return res.status(400).json({ error: `finish must be one of: ${VALID_FINISHES.join(', ')}` });
   }
 
   try {
@@ -49,8 +54,9 @@ exports.create = async (req, res) => {
         notes: notes || null,
         is_commander: is_commander || false,
         is_sideboard: is_sideboard || false,
+        finish: finish || 'nonfoil',
       })
-      .returning(['id', 'collection_id', 'scryfall_id', 'quantity', 'condition', 'purchase_price', 'notes', 'is_commander', 'is_sideboard', 'created_at', 'updated_at']);
+      .returning(['id', 'collection_id', 'scryfall_id', 'quantity', 'condition', 'purchase_price', 'notes', 'is_commander', 'is_sideboard', 'finish', 'created_at', 'updated_at']);
 
     return res.status(201).json(entry);
   } catch (error) {
@@ -65,10 +71,14 @@ exports.create = async (req, res) => {
 exports.update = async (req, res) => {
   const user_id = req.user.id;
   const { id, entryId } = req.params;
-  const { quantity, condition, purchase_price, notes, is_commander, is_sideboard } = req.body;
+  const { quantity, condition, purchase_price, notes, is_commander, is_sideboard, finish } = req.body;
 
   if (condition !== undefined && !VALID_CONDITIONS.includes(condition)) {
     return res.status(400).json({ error: `condition must be one of: ${VALID_CONDITIONS.join(', ')}` });
+  }
+
+  if (finish !== undefined && !VALID_FINISHES.includes(finish)) {
+    return res.status(400).json({ error: `finish must be one of: ${VALID_FINISHES.join(', ')}` });
   }
 
   try {
@@ -89,12 +99,13 @@ exports.update = async (req, res) => {
     if (notes !== undefined) updates.notes = notes;
     if (is_commander !== undefined) updates.is_commander = is_commander;
     if (is_sideboard !== undefined) updates.is_sideboard = is_sideboard;
+    if (finish !== undefined) updates.finish = finish;
     updates.updated_at = db.fn.now();
 
     const [updated] = await db('collection_entries')
       .where({ id: entryId })
       .update(updates)
-      .returning(['id', 'collection_id', 'scryfall_id', 'quantity', 'condition', 'purchase_price', 'notes', 'is_commander', 'is_sideboard', 'created_at', 'updated_at']);
+      .returning(['id', 'collection_id', 'scryfall_id', 'quantity', 'condition', 'purchase_price', 'notes', 'is_commander', 'is_sideboard', 'finish', 'created_at', 'updated_at']);
 
     return res.status(200).json(updated);
   } catch (error) {
@@ -169,6 +180,7 @@ exports.bulkCreate = async (req, res) => {
       notes: entry.notes || null,
       is_commander: entry.is_commander || false,
       is_sideboard: entry.is_sideboard || false,
+      finish: entry.finish || 'nonfoil',
       created_at: db.fn.now(),
       updated_at: db.fn.now(),
     }));
@@ -176,7 +188,7 @@ exports.bulkCreate = async (req, res) => {
     // Bulk insert
     const inserted = await db('collection_entries')
       .insert(entriesToInsert)
-      .returning(['id', 'collection_id', 'scryfall_id', 'quantity', 'condition', 'purchase_price', 'notes', 'is_commander', 'is_sideboard', 'created_at', 'updated_at']);
+      .returning(['id', 'collection_id', 'scryfall_id', 'quantity', 'condition', 'purchase_price', 'notes', 'is_commander', 'is_sideboard', 'finish', 'created_at', 'updated_at']);
 
     return res.status(201).json({ imported: inserted.length, entries: inserted });
   } catch (error) {

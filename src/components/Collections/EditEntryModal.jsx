@@ -21,10 +21,17 @@ const CONDITION_OPTIONS = [
   { label: 'Damaged', value: 'DAMAGED' },
 ];
 
+const FINISH_OPTIONS = [
+  { label: 'Non-Foil', value: 'nonfoil' },
+  { label: 'Foil', value: 'foil' },
+  { label: 'Etched', value: 'etched' },
+];
+
 const EditEntryModal = ({ open, onClose, entry, collectionId, onUpdated }) => {
   const [formData, setFormData] = useState({
     quantity: 1,
     condition: 'NM',
+    finish: 'nonfoil',
     purchase_price: '',
     notes: '',
   });
@@ -34,15 +41,17 @@ const EditEntryModal = ({ open, onClose, entry, collectionId, onUpdated }) => {
 
   useEffect(() => {
     if (open && entry) {
+      const finish = entry.finish || 'nonfoil';
       setFormData({
         quantity: entry.quantity || 1,
         condition: entry.condition || 'NM',
+        finish: finish,
         purchase_price: entry.purchase_price != null ? entry.purchase_price : '',
         notes: entry.notes || '',
       });
       setError('');
     }
-  }, [open, entry]);
+  }, [open, entry?.id]);
 
   const handleClose = () => {
     setError('');
@@ -67,6 +76,7 @@ const EditEntryModal = ({ open, onClose, entry, collectionId, onUpdated }) => {
       const body = {
         quantity: formData.quantity,
         condition: formData.condition,
+        finish: formData.finish,
       };
 
       if (formData.purchase_price !== '') {
@@ -155,6 +165,19 @@ const EditEntryModal = ({ open, onClose, entry, collectionId, onUpdated }) => {
               searchable={false}
               block
               placeholder="Select condition"
+            />
+          </Form.Group>
+
+          <Form.Group>
+            <Form.ControlLabel>Finish</Form.ControlLabel>
+            <SelectPicker
+              key={`finish-${entry?.id}`}
+              data={FINISH_OPTIONS}
+              value={formData.finish}
+              onChange={(value) => setField('finish', value)}
+              searchable={false}
+              block
+              placeholder="Select finish"
             />
           </Form.Group>
 

@@ -164,6 +164,7 @@ exports.getById = async (req, res) => {
         'scryfall_id',
         'quantity',
         'condition',
+        'finish',
         'purchase_price',
         'notes',
         'is_commander',
