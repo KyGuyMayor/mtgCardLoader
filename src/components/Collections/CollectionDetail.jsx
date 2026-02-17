@@ -191,6 +191,9 @@ const CollectionDetail = () => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteEntry, setDeleteEntry] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkDeleteModalOpen, setBulkDeleteModalOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [nameSearch, setNameSearch] = useState('');
   const [colorFilter, setColorFilter] = useState([]);
   const [rarityFilter, setRarityFilter] = useState([]);
@@ -559,40 +562,45 @@ const CollectionDetail = () => {
   };
 
   const sortedData = useMemo(() => {
-    if (!sortColumn || !sortType) return filteredData;
+    let data = filteredData;
+    
+    if (sortColumn && sortType) {
+      data = [...filteredData].sort((a, b) => {
+        const aVal = a[sortColumn];
+        const bVal = b[sortColumn];
 
-    return [...filteredData].sort((a, b) => {
-      const aVal = a[sortColumn];
-      const bVal = b[sortColumn];
+        if (sortColumn === 'rarity') {
+          const aRank = RARITY_ORDER[(aVal || '').toLowerCase()] ?? 99;
+          const bRank = RARITY_ORDER[(bVal || '').toLowerCase()] ?? 99;
+          return sortType === 'asc' ? aRank - bRank : bRank - aRank;
+        }
 
-      if (sortColumn === 'rarity') {
-        const aRank = RARITY_ORDER[(aVal || '').toLowerCase()] ?? 99;
-        const bRank = RARITY_ORDER[(bVal || '').toLowerCase()] ?? 99;
-        return sortType === 'asc' ? aRank - bRank : bRank - aRank;
-      }
+        if (sortColumn === 'condition') {
+          const aRank = CONDITION_ORDER[aVal] ?? 99;
+          const bRank = CONDITION_ORDER[bVal] ?? 99;
+          return sortType === 'asc' ? aRank - bRank : bRank - aRank;
+        }
 
-      if (sortColumn === 'condition') {
-        const aRank = CONDITION_ORDER[aVal] ?? 99;
-        const bRank = CONDITION_ORDER[bVal] ?? 99;
-        return sortType === 'asc' ? aRank - bRank : bRank - aRank;
-      }
+        if (sortColumn === 'finish') {
+          const aRank = FINISH_ORDER[aVal || 'nonfoil'] ?? 99;
+          const bRank = FINISH_ORDER[bVal || 'nonfoil'] ?? 99;
+          return sortType === 'asc' ? aRank - bRank : bRank - aRank;
+        }
 
-      if (sortColumn === 'finish') {
-        const aRank = FINISH_ORDER[aVal || 'nonfoil'] ?? 99;
-        const bRank = FINISH_ORDER[bVal || 'nonfoil'] ?? 99;
-        return sortType === 'asc' ? aRank - bRank : bRank - aRank;
-      }
+        if (typeof aVal === 'number' || typeof bVal === 'number') {
+          const an = aVal ?? -Infinity;
+          const bn = bVal ?? -Infinity;
+          return sortType === 'asc' ? an - bn : bn - an;
+        }
 
-      if (typeof aVal === 'number' || typeof bVal === 'number') {
-        const an = aVal ?? -Infinity;
-        const bn = bVal ?? -Infinity;
-        return sortType === 'asc' ? an - bn : bn - an;
-      }
-
-      const as = (aVal || '').toString();
-      const bs = (bVal || '').toString();
-      return sortType === 'asc' ? as.localeCompare(bs) : bs.localeCompare(as);
-    });
+        const as = (aVal || '').toString();
+        const bs = (bVal || '').toString();
+        return sortType === 'asc' ? as.localeCompare(bs) : bs.localeCompare(as);
+      });
+    }
+    
+    // Add unique _rowIndex to each row for stable selection
+    return data.map((row, idx) => ({ ...row, _rowIndex: idx }));
   }, [filteredData, sortColumn, sortType]);
 
   const displaySortColumn = useMemo(() => {
@@ -761,6 +769,124 @@ const CollectionDetail = () => {
     }
   };
 
+  const handleSelectCheckbox = (rowIndex) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(rowIndex)) {
+      newSelected.delete(rowIndex);
+    } else {
+      newSelected.add(rowIndex);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.size === sortedData.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(sortedData.map((_, idx) => idx)));
+    }
+  };
+
+  const handleBulkDeleteClick = () => {
+    setBulkDeleteModalOpen(true);
+  };
+
+  const handleBulkDeleteClose = () => {
+    setBulkDeleteModalOpen(false);
+  };
+
+  const handleBulkDeleteConfirm = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkDeleting(true);
+    try {
+      // Map row indices back to actual entry IDs
+      const entryIds = Array.from(selectedIds).map((rowIndex) => sortedData[rowIndex]?.id).filter(Boolean);
+      const response = await authFetch(
+        `/collections/${id}/entries/bulk-delete`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entryIds }),
+        }
+      );
+      if (response.ok || response.status === 204) {
+        toaster.push(
+          <Message type="success" showIcon closable>
+            <strong>{selectedIds.size}</strong> entries removed from collection
+          </Message>,
+          { placement: 'topCenter', duration: 3000 }
+        );
+        handleBulkDeleteClose();
+        setSelectedIds(new Set());
+        setRefreshKey((k) => k + 1);
+      } else {
+        const data = await response.json();
+        toaster.push(
+          <Message type="error" showIcon closable>
+            {data.error || 'Failed to delete entries'}
+          </Message>,
+          { placement: 'topCenter', duration: 4000 }
+        );
+      }
+    } catch (err) {
+      toaster.push(
+        <Message type="error" showIcon closable>
+          Unable to connect to server
+        </Message>,
+        { placement: 'topCenter', duration: 4000 }
+      );
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  const CheckboxCell = ({ rowData, ...props }) => (
+    <Cell {...props} style={{ padding: '6px 0', textAlign: 'center' }}>
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+          handleSelectCheckbox(rowData._rowIndex);
+        }}
+        style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}
+      >
+        <input
+          type="checkbox"
+          checked={selectedIds.has(rowData._rowIndex)}
+          onChange={(e) => {
+            e.stopPropagation();
+            handleSelectCheckbox(rowData._rowIndex);
+          }}
+          style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+        />
+      </div>
+    </Cell>
+  );
+
+  const CheckboxHeaderCell = ({ ...props }) => (
+    <HeaderCell {...props} style={{ padding: '6px 0', textAlign: 'center' }}>
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+          handleSelectAll();
+        }}
+        style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}
+      >
+        <input
+          type="checkbox"
+          checked={tableData.length > 0 && selectedIds.size === tableData.length}
+          indeterminate={selectedIds.size > 0 && selectedIds.size < tableData.length}
+          onChange={(e) => {
+            e.stopPropagation();
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
+          style={{ cursor: 'pointer' }}
+        />
+      </div>
+    </HeaderCell>
+  );
+
   const ActionsCell = ({ rowData, ...props }) => (
     <Cell {...props} style={{ padding: '6px 0' }}>
       <Button
@@ -782,9 +908,17 @@ const CollectionDetail = () => {
     </Cell>
   );
 
+  const checkboxColumn = {
+    key: 'checkbox',
+    label: '',
+    width: 50,
+    fixed: true,
+    custom: 'checkbox',
+  };
+
   const actionsColumn = { key: 'actions', label: '', width: 120, custom: 'actions' };
 
-  const columns = [...allColumns, actionsColumn];
+  const columns = [checkboxColumn, ...allColumns, actionsColumn];
 
   const typeBadge = (type) => (
     <span
@@ -1008,6 +1142,11 @@ const CollectionDetail = () => {
     setValidationResult(null);
   }, [refreshKey]);
 
+  // Clear selections when table data changes
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [refreshKey]);
+
   if (loading) {
     return (
       <CustomProvider theme="dark">
@@ -1083,6 +1222,33 @@ const CollectionDetail = () => {
                       status="active"
                     />
                   </div>
+                )}
+                {selectedIds.size > 0 && (
+                  <>
+                    <Badge
+                      content={selectedIds.size}
+                      showZero
+                      style={{
+                        backgroundColor: '#3498db',
+                        color: '#fff',
+                        padding: '2px 8px',
+                        borderRadius: 4,
+                        fontSize: 12,
+                        marginRight: 8,
+                      }}
+                    >
+                      Selected
+                    </Badge>
+                    <Button
+                      size="xs"
+                      appearance="primary"
+                      color="red"
+                      onClick={handleBulkDeleteClick}
+                      loading={bulkDeleting}
+                    >
+                      Bulk Delete
+                    </Button>
+                  </>
                 )}
                 {tableData.length > 0 && (
                   <Button
@@ -1191,16 +1357,20 @@ const CollectionDetail = () => {
                >
                  {columns.map(({ key, label, custom, sortKey, ...rest }) => (
                    <Column {...rest} key={key}>
-                     <HeaderCell>{label}</HeaderCell>
-                     {custom === 'actions'
-                       ? <ActionsCell dataKey={key} />
-                       : custom
-                         ? <GainLossCell dataKey={key} />
-                         : key === 'name'
-                           ? <NameCell dataKey={key} errorMap={validationHighlights.errorMap} warningMap={validationHighlights.warningMap} />
-                           : key === 'finish'
-                             ? <FinishCell dataKey={key} />
-                             : <Cell dataKey={key} />}
+                     {custom === 'checkbox'
+                       ? <CheckboxHeaderCell />
+                       : <HeaderCell>{label}</HeaderCell>}
+                     {custom === 'checkbox'
+                       ? <CheckboxCell dataKey={key} />
+                       : custom === 'actions'
+                         ? <ActionsCell dataKey={key} />
+                         : custom
+                           ? <GainLossCell dataKey={key} />
+                           : key === 'name'
+                             ? <NameCell dataKey={key} errorMap={validationHighlights.errorMap} warningMap={validationHighlights.warningMap} />
+                             : key === 'finish'
+                               ? <FinishCell dataKey={key} />
+                               : <Cell dataKey={key} />}
                    </Column>
                  ))}
                </Table>
@@ -1228,6 +1398,24 @@ const CollectionDetail = () => {
                 </Button>
                 <Button onClick={handleDeleteConfirm} appearance="primary" color="red" loading={deleting}>
                   Delete
+                </Button>
+              </Modal.Footer>
+            </Modal>
+
+            <Modal open={bulkDeleteModalOpen} onClose={handleBulkDeleteClose} size="xs">
+              <Modal.Header>
+                <Modal.Title>Bulk Delete Entries</Modal.Title>
+              </Modal.Header>
+              <Modal.Body>
+                Are you sure you want to remove <strong>{selectedIds.size}</strong> entries from{' '}
+                <strong>{collection?.name}</strong>? This action cannot be undone.
+              </Modal.Body>
+              <Modal.Footer>
+                <Button onClick={handleBulkDeleteClose} appearance="subtle">
+                  Cancel
+                </Button>
+                <Button onClick={handleBulkDeleteConfirm} appearance="primary" color="red" loading={bulkDeleting}>
+                  Delete {selectedIds.size} Entries
                 </Button>
               </Modal.Footer>
             </Modal>
