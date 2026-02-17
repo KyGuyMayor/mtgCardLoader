@@ -11,7 +11,19 @@ const FORMAT_MOXFIELD = 'moxfield';
 
 const DECKBOX_HEADERS = ['Count', 'Name', 'Edition', 'Condition', 'Language', 'Foil', 'Tags', 'My Price'];
 
-const MOXFIELD_HEADERS = ['Count', 'Name', 'Edition', 'Condition', 'Purchase Price', 'Section'];
+const MOXFIELD_HEADERS = ['Count', 'Name', 'Edition', 'Condition', 'Purchase Price', 'Section', 'Foil'];
+
+function finishToDeckboxFoil(finish) {
+  if (finish === 'foil') return 'Foil';
+  if (finish === 'etched') return 'Etched';
+  return '';
+}
+
+function finishToMoxfieldFoil(finish) {
+  if (finish === 'foil') return 'Foil';
+  if (finish === 'etched') return 'Etched';
+  return '';
+}
 
 function escapeCSV(value) {
   const str = value == null ? '' : String(value);
@@ -57,7 +69,7 @@ function buildCSV(entries, format) {
         escapeCSV(entry.set_name || ''),
         escapeCSV(mapConditionDeckbox(entry.condition)),
         'English',
-        '',
+        finishToDeckboxFoil(entry.finish || 'nonfoil'),
         entry.is_sideboard ? 'Sideboard' : '',
         entry.purchase_price_raw != null ? entry.purchase_price_raw.toFixed(2) : '',
       ].join(','));
@@ -72,6 +84,7 @@ function buildCSV(entries, format) {
         escapeCSV(mapConditionMoxfield(entry.condition)),
         entry.purchase_price_raw != null ? entry.purchase_price_raw.toFixed(2) : '',
         entry.is_sideboard ? 'sideboard' : 'mainboard',
+        finishToMoxfieldFoil(entry.finish || 'nonfoil'),
       ].join(','));
     });
   }

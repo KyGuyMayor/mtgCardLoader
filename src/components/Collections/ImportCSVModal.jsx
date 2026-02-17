@@ -45,6 +45,18 @@ function normalizeCondition(raw) {
   return mapped || 'NM';
 }
 
+function normalizeFinish(raw) {
+  if (!raw) return 'nonfoil';
+  const lower = raw.trim().toLowerCase();
+  if (lower === 'foil' || lower === 'yes' || lower === '1' || lower === 'true') {
+    return 'foil';
+  }
+  if (lower === 'etched') {
+    return 'etched';
+  }
+  return 'nonfoil';
+}
+
 function parseCSVRows(text) {
   let cleaned = text.replace(/^\uFEFF/, '');
 
@@ -137,6 +149,7 @@ function parseCards(headers, rows) {
   const iEdition = headerIndex(headers, 'edition', 'set', 'set code', 'set_code');
   const iCondition = headerIndex(headers, 'condition');
   const iPrice = headerIndex(headers, 'purchase price', 'price', 'my price');
+  const iFoil = headerIndex(headers, 'foil');
 
   if (iName < 0) return [];
 
@@ -148,6 +161,7 @@ function parseCards(headers, rows) {
     const condition = iCondition >= 0 ? normalizeCondition(row[iCondition]) : 'NM';
     const priceStr = iPrice >= 0 ? (row[iPrice] || '') : '';
     const price = priceStr ? parseFloat(priceStr.replace(/[^0-9.]/g, '')) : null;
+    const finish = iFoil >= 0 ? normalizeFinish(row[iFoil]) : 'nonfoil';
 
     return {
       _idx: idx,
@@ -155,6 +169,7 @@ function parseCards(headers, rows) {
       name,
       edition,
       condition,
+      finish,
       purchase_price: price != null && !isNaN(price) && price > 0 ? price : null,
       status: 'pending',
       scryfall_id: null,
@@ -398,6 +413,7 @@ const ImportCSVModal = ({ open, onClose, onImported }) => {
         scryfall_id: card.scryfall_id,
         quantity: card.count,
         condition: card.condition,
+        finish: card.finish || 'nonfoil',
         purchase_price: card.purchase_price || null,
       }));
 
