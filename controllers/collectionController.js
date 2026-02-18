@@ -6,7 +6,7 @@ const { DECK_FORMAT_RULES, isBasicLand } = require('../src/helpers/deckRules');
 const VALID_TYPES = ['TRADE_BINDER', 'DECK'];
 const VALID_DECK_TYPES = [
   'COMMANDER', 'STANDARD', 'MODERN', 'LEGACY',
-  'VINTAGE', 'PIONEER', 'PAUPER', 'DRAFT', 'OTHER'
+  'VINTAGE', 'PIONEER', 'PAUPER', 'DRAFT', 'PLANAR_STANDARD', 'OTHER'
 ];
 
 const keepAliveAgent = new https.Agent({ keepAlive: true });
@@ -593,7 +593,7 @@ exports.validate = async (req, res) => {
           if (!formatRules.legalSets.includes(card.set)) {
             errors.push({
               type: 'SET_LEGALITY',
-              message: `${card.name} is not from a legal set in ${formatRules.name}`,
+              message: `${card.name} (set: ${card.set.toUpperCase()}) is not from a legal set in ${formatRules.name}`,
               cards: [{ name: card.name, scryfall_id: entry.scryfall_id }],
             });
           }

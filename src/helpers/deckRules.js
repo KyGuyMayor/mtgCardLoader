@@ -38,7 +38,16 @@ const DECK_FORMAT_RULES = {
     requiresCommander: false,
     scryfallLegalityKey: null,
     legalSets: ['ecl', 'eoe', 'tdm', 'dft', 'fdn'],
+    legalSetNames: {
+      ecl: 'Lorwyn Eclipsed',
+      eoe: 'Edge of Eternities',
+      tdm: 'Tarkir: Dragonstorm',
+      dft: 'Aetherdrift',
+      fdn: 'Foundations',
+    },
     bannedCards: ['Cori-steel Cutter'],
+    description: 'Community format using Universe Within sets from the last two years plus Foundations. Excludes Universes Beyond sets.',
+    rotationNote: 'Rotates with each new Universe Within Standard release. Foundations is always legal.',
   },
   MODERN: {
     name: 'Modern',
