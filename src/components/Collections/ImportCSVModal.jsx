@@ -143,13 +143,28 @@ function headerIndex(headers, ...names) {
   return -1;
 }
 
-function parseCards(headers, rows) {
-  const iCount = headerIndex(headers, 'count', 'qty', 'quantity');
-  const iName = headerIndex(headers, 'name', 'card name', 'card');
-  const iEdition = headerIndex(headers, 'edition', 'set', 'set code', 'set_code');
-  const iCondition = headerIndex(headers, 'condition');
-  const iPrice = headerIndex(headers, 'purchase price', 'price', 'my price');
-  const iFoil = headerIndex(headers, 'foil');
+function parseCards(headers, rows, customMapping = null) {
+  let iCount, iName, iEdition, iCondition, iPrice, iFoil, iNotes;
+
+  if (customMapping) {
+    // Use custom column mapping
+    iCount = customMapping.quantity;
+    iName = customMapping.name;
+    iEdition = customMapping.set;
+    iCondition = customMapping.condition;
+    iPrice = customMapping.purchase_price;
+    iFoil = customMapping.foil;
+    iNotes = customMapping.notes;
+  } else {
+    // Auto-detect from headers
+    iCount = headerIndex(headers, 'count', 'qty', 'quantity');
+    iName = headerIndex(headers, 'name', 'card name', 'card');
+    iEdition = headerIndex(headers, 'edition', 'set', 'set code', 'set_code');
+    iCondition = headerIndex(headers, 'condition');
+    iPrice = headerIndex(headers, 'purchase price', 'price', 'my price');
+    iFoil = headerIndex(headers, 'foil');
+    iNotes = headerIndex(headers, 'notes');
+  }
 
   if (iName < 0) return [];
 
@@ -162,6 +177,7 @@ function parseCards(headers, rows) {
     const priceStr = iPrice >= 0 ? (row[iPrice] || '') : '';
     const price = priceStr ? parseFloat(priceStr.replace(/[^0-9.]/g, '')) : null;
     const finish = iFoil >= 0 ? normalizeFinish(row[iFoil]) : 'nonfoil';
+    const notes = iNotes >= 0 ? (row[iNotes] || '').trim() : '';
 
     return {
       _idx: idx,
@@ -170,6 +186,7 @@ function parseCards(headers, rows) {
       edition,
       condition,
       finish,
+      notes,
       purchase_price: price != null && !isNaN(price) && price > 0 ? price : null,
       status: 'pending',
       scryfall_id: null,
@@ -210,6 +227,18 @@ const ImportCSVModal = ({ open, onClose, onImported }) => {
   const [matching, setMatching] = useState(false);
   const [importing, setImporting] = useState(false);
   const [collectionId, setCollectionId] = useState(null);
+  const [csvHeaders, setCsvHeaders] = useState([]);
+  const [csvDataRows, setCsvDataRows] = useState([]);
+  const [columnMapping, setColumnMapping] = useState({
+    name: -1,
+    quantity: -1,
+    set: -1,
+    condition: -1,
+    purchase_price: -1,
+    foil: -1,
+    notes: -1,
+  });
+  const [forceGenericMapping, setForceGenericMapping] = useState(false);
   const cancelRef = useRef(false);
   const fileInputRef = useRef(null);
   const dropRef = useRef(null);
@@ -250,6 +279,18 @@ const ImportCSVModal = ({ open, onClose, onImported }) => {
     setMatching(false);
     setImporting(false);
     setCollectionId(null);
+    setCsvHeaders([]);
+    setCsvDataRows([]);
+    setColumnMapping({
+      name: -1,
+      quantity: -1,
+      set: -1,
+      condition: -1,
+      purchase_price: -1,
+      foil: -1,
+      notes: -1,
+    });
+    setForceGenericMapping(false);
     onClose();
   };
 
@@ -275,6 +316,30 @@ const ImportCSVModal = ({ open, onClose, onImported }) => {
         const dataRows = allRows.slice(1);
         const format = detectFormat(headers);
         setDetectedFormat(format);
+        setCsvHeaders(headers);
+        setCsvDataRows(dataRows);
+        setForceGenericMapping(false);
+
+        // If format is unknown, don't auto-parse yet — wait for column mapping
+        if (format === FORMAT_UNKNOWN) {
+          // Initialize column mapping from localStorage if available
+          const savedMapping = localStorage.getItem('csvColumnMapping');
+          if (savedMapping) {
+            try {
+              const parsed = JSON.parse(savedMapping);
+              setColumnMapping(parsed);
+              // Auto-apply saved mapping if name column is set
+              if (parsed.name >= 0) {
+                applyColumnMapping(parsed, headers, dataRows);
+              }
+            } catch (err) {
+              // Ignore invalid JSON
+            }
+          }
+          return;
+        }
+
+        // For known formats, auto-parse immediately
         const cards = parseCards(headers, dataRows);
         if (cards.length === 0) {
           setError('No valid card entries found. Check that your CSV has a "Name" column.');
@@ -301,6 +366,28 @@ const ImportCSVModal = ({ open, onClose, onImported }) => {
     e.preventDefault();
     e.stopPropagation();
     processFile(e.dataTransfer.files[0]);
+  };
+
+  const applyColumnMapping = (mapping, headers, dataRows) => {
+    // Validate that name column is set
+    if (mapping.name < 0) {
+      setError('Name column is required');
+      return;
+    }
+
+    // Parse cards with the custom mapping
+    const cards = parseCards(headers, dataRows, mapping);
+    if (cards.length === 0) {
+      setError('No valid card entries found with the selected column mapping.');
+      return;
+    }
+
+    // Save mapping to localStorage for future use
+    localStorage.setItem('csvColumnMapping', JSON.stringify(mapping));
+
+    setParsedCards(cards);
+    setError('');
+    // Keep on upload step but show collection selection mode now
   };
 
   const matchCards = async (cards, targetCollectionId) => {
@@ -541,7 +628,7 @@ const ImportCSVModal = ({ open, onClose, onImported }) => {
               </div>
             )}
 
-            {file && detectedFormat && (
+            {file && detectedFormat && !forceGenericMapping && detectedFormat !== FORMAT_UNKNOWN && (
               <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
                   <span style={{ color: '#aaa' }}>File: <strong style={{ color: '#fff' }}>{file.name}</strong></span>
@@ -549,6 +636,9 @@ const ImportCSVModal = ({ open, onClose, onImported }) => {
                   <Badge content={`${parsedCards.length} cards`} />
                   <Button size="xs" appearance="ghost" onClick={() => { setFile(null); setParsedCards([]); setDetectedFormat(null); setError(''); }}>
                     Change File
+                  </Button>
+                  <Button size="xs" appearance="ghost" onClick={() => { setForceGenericMapping(true); setParsedCards([]); }}>
+                    Use Column Mapping
                   </Button>
                 </div>
 
@@ -627,10 +717,137 @@ const ImportCSVModal = ({ open, onClose, onImported }) => {
                 )}
               </>
             )}
-          </>
-        )}
 
-        {step === 'match' && (
+            {file && (detectedFormat === FORMAT_UNKNOWN || forceGenericMapping) && csvHeaders.length > 0 && (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+                  <span style={{ color: '#aaa' }}>File: <strong style={{ color: '#fff' }}>{file.name}</strong></span>
+                  <Badge content="Generic CSV" />
+                  <Button size="xs" appearance="ghost" onClick={() => { setFile(null); setParsedCards([]); setDetectedFormat(null); setError(''); setCsvHeaders([]); setCsvDataRows([]); }}>
+                    Change File
+                  </Button>
+                </div>
+
+                <div style={{ marginBottom: 16 }}>
+                  <h4 style={{ marginBottom: 8 }}>Map CSV Columns</h4>
+                  <p style={{ fontSize: 12, color: '#aaa', marginBottom: 12 }}>Select which CSV column contains each field. Name is required.</p>
+                  
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ display: 'block', marginBottom: 4, fontSize: 12, color: '#ccc' }}>Name <span style={{ color: '#e74c3c' }}>*</span></label>
+                    <SelectPicker
+                      data={[
+                        { label: 'Select column...', value: -1 },
+                        ...csvHeaders.map((h, i) => ({ label: h, value: i })),
+                      ]}
+                      value={columnMapping.name}
+                      onChange={(val) => setColumnMapping({ ...columnMapping, name: val })}
+                      block
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ display: 'block', marginBottom: 4, fontSize: 12, color: '#ccc' }}>Quantity (optional)</label>
+                    <SelectPicker
+                      data={[
+                        { label: 'None', value: -1 },
+                        ...csvHeaders.map((h, i) => ({ label: h, value: i })),
+                      ]}
+                      value={columnMapping.quantity}
+                      onChange={(val) => setColumnMapping({ ...columnMapping, quantity: val })}
+                      block
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ display: 'block', marginBottom: 4, fontSize: 12, color: '#ccc' }}>Set/Edition (optional)</label>
+                    <SelectPicker
+                      data={[
+                        { label: 'None', value: -1 },
+                        ...csvHeaders.map((h, i) => ({ label: h, value: i })),
+                      ]}
+                      value={columnMapping.set}
+                      onChange={(val) => setColumnMapping({ ...columnMapping, set: val })}
+                      block
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ display: 'block', marginBottom: 4, fontSize: 12, color: '#ccc' }}>Condition (optional)</label>
+                    <SelectPicker
+                      data={[
+                        { label: 'None', value: -1 },
+                        ...csvHeaders.map((h, i) => ({ label: h, value: i })),
+                      ]}
+                      value={columnMapping.condition}
+                      onChange={(val) => setColumnMapping({ ...columnMapping, condition: val })}
+                      block
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ display: 'block', marginBottom: 4, fontSize: 12, color: '#ccc' }}>Purchase Price (optional)</label>
+                    <SelectPicker
+                      data={[
+                        { label: 'None', value: -1 },
+                        ...csvHeaders.map((h, i) => ({ label: h, value: i })),
+                      ]}
+                      value={columnMapping.purchase_price}
+                      onChange={(val) => setColumnMapping({ ...columnMapping, purchase_price: val })}
+                      block
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ display: 'block', marginBottom: 4, fontSize: 12, color: '#ccc' }}>Foil (optional)</label>
+                    <SelectPicker
+                      data={[
+                        { label: 'None', value: -1 },
+                        ...csvHeaders.map((h, i) => ({ label: h, value: i })),
+                      ]}
+                      value={columnMapping.foil}
+                      onChange={(val) => setColumnMapping({ ...columnMapping, foil: val })}
+                      block
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ display: 'block', marginBottom: 4, fontSize: 12, color: '#ccc' }}>Notes (optional)</label>
+                    <SelectPicker
+                      data={[
+                        { label: 'None', value: -1 },
+                        ...csvHeaders.map((h, i) => ({ label: h, value: i })),
+                      ]}
+                      value={columnMapping.notes}
+                      onChange={(val) => setColumnMapping({ ...columnMapping, notes: val })}
+                      block
+                    />
+                  </div>
+                </div>
+
+                {csvDataRows.length > 0 && (
+                  <>
+                    <h4 style={{ marginBottom: 8 }}>Preview ({Math.min(csvDataRows.length, 50)} of {csvDataRows.length} rows)</h4>
+                    <Table
+                      data={csvDataRows.slice(0, 50)}
+                      height={250}
+                      virtualized
+                      rowHeight={40}
+                    >
+                      {csvHeaders.map((header, idx) => (
+                        <Column key={idx} width={120}>
+                          <HeaderCell>{header}</HeaderCell>
+                          <Cell dataKey={idx.toString()} />
+                        </Column>
+                      ))}
+                      </Table>
+                      </>
+                      )}
+                      </>
+                      )}
+                      </>
+                      )}
+
+            {step === 'match' && (
           <>
             {matching && (
               <div style={{ marginBottom: 16 }}>
@@ -697,11 +914,19 @@ const ImportCSVModal = ({ open, onClose, onImported }) => {
         <Button onClick={handleClose} appearance="subtle">
           Cancel
         </Button>
-        {step === 'upload' && (
+        {step === 'upload' && file && (detectedFormat === FORMAT_UNKNOWN || forceGenericMapping) && csvHeaders.length > 0 && parsedCards.length === 0 && (
+          <Button
+            appearance="primary"
+            disabled={columnMapping.name < 0}
+            onClick={() => applyColumnMapping(columnMapping, csvHeaders, csvDataRows)}
+          >
+            Apply Mapping
+          </Button>
+        )}
+        {step === 'upload' && parsedCards.length > 0 && (
           <Button
             appearance="primary"
             disabled={
-              !parsedCards.length ||
               (destinationMode === 'existing' && !selectedCollection) ||
               (destinationMode === 'new' && !newCollectionName.trim())
             }
