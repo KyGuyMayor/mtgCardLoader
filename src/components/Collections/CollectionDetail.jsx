@@ -135,6 +135,7 @@ const NameCell = ({ rowData, errorMap, warningMap, ...props }) => {
   const error = scryfallId ? errorMap[scryfallId] : null;
   const warning = scryfallId ? warningMap[scryfallId] : null;
   const violation = error || warning;
+  const isCommander = rowData?.is_commander;
 
   return (
     <Cell {...props}>
@@ -170,6 +171,26 @@ const NameCell = ({ rowData, errorMap, warningMap, ...props }) => {
               {error ? '✕' : '⚠'}
             </span>
           </Whisper>
+        )}
+        {isCommander && (
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 20,
+              height: 20,
+              backgroundColor: '#f1c40f',
+              color: '#000',
+              fontSize: 10,
+              fontWeight: 'bold',
+              borderRadius: '50%',
+              flexShrink: 0,
+            }}
+            title="Commander"
+          >
+            ♛
+          </span>
         )}
         <span>{rowData?.name || 'Unknown Card'}</span>
       </div>
@@ -599,9 +620,17 @@ const CollectionDetail = () => {
       });
     }
     
+    // Pin commander card to top for COMMANDER deck type
+    if (collection?.deck_type === 'COMMANDER') {
+      const commander = data.find((row) => row.is_commander);
+      if (commander) {
+        data = [commander, ...data.filter((row) => !row.is_commander)];
+      }
+    }
+    
     // Add unique _rowIndex to each row for stable selection
     return data.map((row, idx) => ({ ...row, _rowIndex: idx }));
-  }, [filteredData, sortColumn, sortType]);
+  }, [filteredData, sortColumn, sortType, collection?.deck_type]);
 
   const displaySortColumn = useMemo(() => {
     if (!sortColumn) return null;
@@ -1346,6 +1375,13 @@ const CollectionDetail = () => {
                  rowClassName={(rowData) => {
                    const { errorMap, warningMap } = validationHighlights;
                    const scryfallId = rowData?.scryfall_id;
+                   const isCommander = collection?.deck_type === 'COMMANDER' && rowData?.is_commander;
+                   
+                   // Commander highlighting takes precedence (no conflict with errors/warnings)
+                   if (isCommander) {
+                     return 'commander-row';
+                   }
+                   
                    if (scryfallId && errorMap[scryfallId]) {
                      return 'violation-error-row';
                    }

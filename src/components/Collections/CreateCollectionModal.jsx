@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Modal,
   Button,
@@ -8,6 +8,7 @@ import {
   Message,
 } from 'rsuite';
 import authFetch from '../../helpers/authFetch';
+import { DECK_FORMAT_RULES } from '../../helpers/deckRules';
 
 const TYPE_OPTIONS = [
   { label: 'Trade Binder', value: 'TRADE_BINDER' },
@@ -37,6 +38,62 @@ const CreateCollectionModal = ({ open, onClose, onCreated }) => {
   const [formData, setFormData] = useState({ ...INITIAL_FORM });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Generate deck format hints based on selected deck_type
+  const deckHints = useMemo(() => {
+    if (!formData.deck_type || formData.deck_type === 'OTHER') {
+      return null;
+    }
+
+    const rules = DECK_FORMAT_RULES[formData.deck_type];
+    if (!rules) {
+      return null;
+    }
+
+    const hints = [];
+
+    // Deck size hint
+    if (rules.minDeckSize !== null && rules.maxDeckSize !== null) {
+      hints.push(`Exactly ${rules.minDeckSize} cards`);
+    } else if (rules.minDeckSize !== null) {
+      hints.push(`Minimum ${rules.minDeckSize} cards`);
+    }
+
+    // Copy limit hint
+    if (rules.singleton) {
+      hints.push('Singleton: 1 copy per card');
+    } else if (rules.maxCopies !== null) {
+      hints.push(`Max ${rules.maxCopies} copies per card`);
+    }
+
+    // Sideboard hint
+    if (rules.sideboardSize === 0) {
+      hints.push('No sideboard');
+    } else if (rules.sideboardSize !== null) {
+      hints.push(`Up to ${rules.sideboardSize} card sideboard`);
+    }
+
+    // Basic land exemption
+    if (rules.basicLandExempt && !rules.singleton) {
+      hints.push('Basic lands exempt from copy limit');
+    }
+
+    // Commander-specific hints
+    if (rules.requiresCommander) {
+      hints.push('Requires a Legendary Creature as commander');
+      hints.push('Cards must match commander color identity');
+    }
+
+    // Planar Standard-specific hints
+    if (formData.deck_type === 'PLANAR_STANDARD') {
+      hints.push('Universe Within cards only');
+      if (rules.legalSets && rules.legalSets.length > 0) {
+        hints.push(`Legal sets: ${rules.legalSets.join(', ').toUpperCase()}`);
+      }
+    }
+
+    return hints.length > 0 ? hints : null;
+  }, [formData.deck_type]);
 
   const handleClose = () => {
     setFormData({ ...INITIAL_FORM });
@@ -139,17 +196,31 @@ const CreateCollectionModal = ({ open, onClose, onCreated }) => {
           </Form.Group>
 
           {formData.type === 'DECK' && (
-            <Form.Group>
-              <Form.ControlLabel>Deck Type</Form.ControlLabel>
-              <SelectPicker
-                data={DECK_TYPE_OPTIONS}
-                value={formData.deck_type}
-                onChange={(value) => setField('deck_type', value)}
-                searchable={false}
-                block
-                placeholder="Select deck type"
-              />
-            </Form.Group>
+            <>
+              <Form.Group>
+                <Form.ControlLabel>Deck Type</Form.ControlLabel>
+                <SelectPicker
+                  data={DECK_TYPE_OPTIONS}
+                  value={formData.deck_type}
+                  onChange={(value) => setField('deck_type', value)}
+                  searchable={false}
+                  block
+                  placeholder="Select deck type"
+                />
+              </Form.Group>
+
+              {deckHints && (
+                <Message type="info" showIcon style={{ marginBottom: 16 }}>
+                  <div>
+                    {deckHints.map((hint, idx) => (
+                      <div key={idx} style={{ marginBottom: idx < deckHints.length - 1 ? 6 : 0 }}>
+                        • {hint}
+                      </div>
+                    ))}
+                  </div>
+                </Message>
+              )}
+            </>
           )}
 
           <Form.Group>

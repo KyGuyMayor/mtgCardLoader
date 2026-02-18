@@ -4,3 +4,7 @@
 .violation-warning-row {
   background-color: rgba(243, 156, 18, 0.1) !important;
 }
+.commander-row {
+  background-color: rgba(241, 196, 15, 0.08) !important;
+  border-left: 4px solid #f1c40f !important;
+}
