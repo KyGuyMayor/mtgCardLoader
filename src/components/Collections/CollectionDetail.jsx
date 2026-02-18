@@ -1476,6 +1476,30 @@ const CollectionDetail = () => {
                   </div>
                 ) : validationResult ? (
                   <>
+                    {collection?.deck_type === 'PLANAR_STANDARD' && formatRules && (
+                      <Panel shaded style={{ marginBottom: 16, borderLeft: '3px solid #3498db' }}>
+                        <h6 style={{ marginBottom: 8 }}>Format Info</h6>
+                        {formatRules.description && (
+                          <p style={{ fontSize: 13, color: '#aaa', marginBottom: 8 }}>{formatRules.description}</p>
+                        )}
+                        <div style={{ marginBottom: 6, fontSize: 13 }}>
+                          <strong>Legal Sets:</strong>{' '}
+                          {formatRules.legalSetNames
+                            ? formatRules.legalSets.map(code => formatRules.legalSetNames[code] || code.toUpperCase()).join(', ')
+                            : formatRules.legalSets.map(s => s.toUpperCase()).join(', ')}
+                        </div>
+                        <div style={{ fontSize: 13 }}>
+                          <strong>Banned Cards:</strong>{' '}
+                          {formatRules.bannedCards && formatRules.bannedCards.length > 0
+                            ? formatRules.bannedCards.join(', ')
+                            : 'None'}
+                        </div>
+                        {formatRules.rotationNote && (
+                          <p style={{ fontSize: 12, color: '#888', marginTop: 8, fontStyle: 'italic' }}>{formatRules.rotationNote}</p>
+                        )}
+                      </Panel>
+                    )}
+
                     {validationResult.valid ? (
                       <Message
                         type="success"
@@ -1492,10 +1516,12 @@ const CollectionDetail = () => {
                         {validationResult.errors.map((error, idx) => (
                           <Panel key={idx} style={{ marginBottom: 8 }} shaded>
                             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                              <span style={{ color: '#e74c3c', fontSize: 18, flexShrink: 0 }}>✕</span>
+                              <span style={{ color: error.type === 'BANNED_CARD' ? '#9b59b6' : '#e74c3c', fontSize: 18, flexShrink: 0 }}>
+                                {error.type === 'BANNED_CARD' ? '⊘' : '✕'}
+                              </span>
                               <div style={{ flex: 1 }}>
                                 <div style={{ fontWeight: 'bold', marginBottom: 4 }}>
-                                  {error.type}
+                                  {error.type === 'BANNED_CARD' ? 'BANNED CARD' : error.type === 'SET_LEGALITY' ? 'SET LEGALITY' : error.type}
                                 </div>
                                 <div style={{ marginBottom: 8, fontSize: 13 }}>
                                   {error.message}

@@ -24,6 +24,7 @@ const DECK_TYPE_OPTIONS = [
   { label: 'Pioneer', value: 'PIONEER' },
   { label: 'Pauper', value: 'PAUPER' },
   { label: 'Draft', value: 'DRAFT' },
+  { label: 'Planar Standard', value: 'PLANAR_STANDARD' },
   { label: 'Other', value: 'OTHER' },
 ];
 
@@ -87,7 +88,10 @@ const CreateCollectionModal = ({ open, onClose, onCreated }) => {
     // Planar Standard-specific hints
     if (formData.deck_type === 'PLANAR_STANDARD') {
       hints.push('Universe Within cards only');
-      if (rules.legalSets && rules.legalSets.length > 0) {
+      if (rules.legalSetNames) {
+        const setNames = Object.values(rules.legalSetNames).join(', ');
+        hints.push(`Legal sets: ${setNames}`);
+      } else if (rules.legalSets && rules.legalSets.length > 0) {
         hints.push(`Legal sets: ${rules.legalSets.join(', ').toUpperCase()}`);
       }
     }

@@ -30,7 +30,7 @@ const FINISH_OPTIONS = [
 ];
 
 const CONSTRUCTED_DECK_TYPES = [
-  'COMMANDER', 'STANDARD', 'MODERN', 'LEGACY', 'VINTAGE', 'PIONEER', 'PAUPER',
+  'COMMANDER', 'STANDARD', 'MODERN', 'LEGACY', 'VINTAGE', 'PIONEER', 'PAUPER', 'PLANAR_STANDARD',
 ];
 
 const INITIAL_FORM = {
@@ -203,6 +203,18 @@ const AddToCollectionModal = ({ open, onClose, scryfallId, cardName, card }) => 
         if (legality !== 'legal' && legality !== 'restricted' && !isBasicLand(card.name)) {
           validationWarnings.push(
             `This card is not legal in ${formatRules.name}`
+          );
+        }
+      } else if (col.deck_type === 'PLANAR_STANDARD') {
+        // Planar Standard: check set legality and banned list
+        if (formatRules.bannedCards && formatRules.bannedCards.includes(card.name)) {
+          validationWarnings.push(
+            `This card is banned in Planar Standard`
+          );
+        }
+        if (formatRules.legalSets && card.set && !formatRules.legalSets.includes(card.set)) {
+          validationWarnings.push(
+            `This card is not from a legal set in Planar Standard`
           );
         }
       }
