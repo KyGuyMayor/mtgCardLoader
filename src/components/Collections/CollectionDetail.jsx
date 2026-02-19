@@ -24,6 +24,7 @@ import NavigationBar from '../Shared/NavigationBar';
 import EditEntryModal from './EditEntryModal';
 import CollectionFilters from './CollectionFilters';
 import ExportCSVModal from './ExportCSVModal';
+import DeckVisualView from './DeckVisualView';
 import authFetch from '../../helpers/authFetch';
 import { DECK_FORMAT_RULES } from '../../helpers/deckRules';
 import './CollectionDetail.css';
@@ -231,6 +232,7 @@ const CollectionDetail = () => {
   const [validationLoading, setValidationLoading] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
   const [deckSection, setDeckSection] = useState('all');
+  const [viewMode, setViewMode] = useState('table');
   const priceCacheRef = useRef({});
   const toaster = useToaster();
   const isMountedRef = useRef(true);
@@ -265,6 +267,21 @@ const CollectionDetail = () => {
       ? currentRaw - purchaseRaw
       : null;
     const rawColors = card?.colors || [];
+
+    // Extract image URIs for visual view (CT-54)
+    const isMissingImage = card?.image_status === 'missing';
+    let imageSmall = null;
+    let imageNormal = null;
+    if (card && !isMissingImage) {
+      if (card.image_uris) {
+        imageSmall = card.image_uris.small || null;
+        imageNormal = card.image_uris.normal || null;
+      } else if (card.card_faces && card.card_faces[0]?.image_uris) {
+        imageSmall = card.card_faces[0].image_uris.small || null;
+        imageNormal = card.card_faces[0].image_uris.normal || null;
+      }
+    }
+
     return {
       ...entry,
       name: card?.name || 'Unknown Card',
@@ -273,6 +290,11 @@ const CollectionDetail = () => {
       colors_raw: rawColors,
       colors: rawColors.join(', ') || 'Colorless',
       set_name: card?.set_name || '',
+      cmc: card?.cmc ?? 0,
+      image_small: imageSmall,
+      image_normal: imageNormal,
+      image_uris: card?.image_uris || null,
+      card_faces: card?.card_faces || null,
       purchase_price_display: purchaseRaw != null
         ? `$${purchaseRaw.toFixed(2)}`
         : '',
@@ -534,6 +556,7 @@ const CollectionDetail = () => {
       // Top 10 most valuable
       if (row.purchase_price_raw != null) {
         cardsByPrice.push({
+          id: row.id,
           name: row.name,
           scryfall_id: row.scryfall_id,
           quantity: quantity,
@@ -894,18 +917,17 @@ const CollectionDetail = () => {
   const CheckboxHeaderCell = ({ ...props }) => (
     <HeaderCell {...props} style={{ padding: '6px 0', textAlign: 'center' }}>
       <div
-        onClick={(e) => {
-          e.stopPropagation();
-          handleSelectAll();
-        }}
         style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}
       >
         <input
           type="checkbox"
           checked={tableData.length > 0 && selectedIds.size === tableData.length}
-          indeterminate={selectedIds.size > 0 && selectedIds.size < tableData.length}
+          ref={(el) => {
+            if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < tableData.length;
+          }}
           onChange={(e) => {
             e.stopPropagation();
+            handleSelectAll();
           }}
           onClick={(e) => {
             e.stopPropagation();
@@ -1100,8 +1122,8 @@ const CollectionDetail = () => {
               <h5 style={{ marginTop: 0, marginBottom: 12, fontSize: 14 }}>Top 10 Most Valuable</h5>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 250, overflowY: 'auto' }}>
                 {stats.top10MostValuableCards.map((card) => (
-                  <div
-                    key={card.scryfall_id}
+                <div
+                  key={card.id}
                     style={{
                       display: 'flex',
                       justifyContent: 'space-between',
@@ -1298,6 +1320,23 @@ const CollectionDetail = () => {
                     Validate Deck
                   </Button>
                 )}
+                {tableData.length > 0 && (
+                  <ButtonGroup size="xs">
+                    <Button
+                      appearance={viewMode === 'table' ? 'primary' : 'default'}
+                      onClick={() => setViewMode('table')}
+                    >
+                      Table
+                    </Button>
+                    <Button
+                      appearance={viewMode === 'visual' ? 'primary' : 'default'}
+                      onClick={() => setViewMode('visual')}
+                      disabled={cardLoading}
+                    >
+                      Visual
+                    </Button>
+                  </ButtonGroup>
+                )}
               </div>
               {tableData.length > 0 && !priceLoading && (
                 <div style={{ display: 'flex', gap: SPACING.statsGap, flexWrap: 'wrap', marginTop: 8, fontSize: 13 }}>
@@ -1361,6 +1400,12 @@ const CollectionDetail = () => {
                 <p style={{ fontSize: 18, marginBottom: 8 }}>No cards in this collection</p>
                 <p>Add cards from card pages to start building your collection.</p>
               </div>
+            ) : viewMode === 'visual' ? (
+              <DeckVisualView
+                sortedData={sortedData}
+                collection={collection}
+                navigate={navigate}
+              />
             ) : (
                <Table
                  loading={cardLoading}
