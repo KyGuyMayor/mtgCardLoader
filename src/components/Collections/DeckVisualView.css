@@ -1,0 +1,166 @@
+.dvv-mana-curve {
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  background-color: #2c2c2c;
+  border-radius: 6px;
+  border: 1px solid #444;
+}
+
+.dvv-mana-curve h5 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+}
+
+.dvv-mana-bars {
+  display: flex;
+  align-items: flex-end;
+  height: 100px;
+}
+
+.dvv-mana-bars--desktop {
+  gap: 8px;
+}
+
+.dvv-mana-bars--mobile {
+  gap: 4px;
+}
+
+.dvv-mana-bucket {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+}
+
+.dvv-mana-count {
+  font-size: 11px;
+  color: #ccc;
+  margin-bottom: 2px;
+}
+
+.dvv-mana-bar {
+  width: 100%;
+  max-width: 40px;
+  background-color: #3498db;
+  border-radius: 3px 3px 0 0;
+  transition: height 0.2s;
+}
+
+.dvv-mana-label {
+  font-size: 11px;
+  color: #888;
+  margin-top: 4px;
+}
+
+/* Card image container */
+.dvv-card-image {
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.dvv-card-img {
+  border-radius: 6px;
+  object-fit: cover;
+  display: block;
+}
+
+.dvv-card-placeholder {
+  border-radius: 6px;
+  background-color: #333;
+  border: 1px solid #555;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  font-size: 11px;
+  color: #aaa;
+  text-align: center;
+  word-break: break-word;
+}
+
+.dvv-qty-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background-color: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 1px 5px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+/* Hover preview */
+.dvv-preview {
+  position: fixed;
+  z-index: 9999;
+  background-color: #1a1a2e;
+  border: 1px solid #555;
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  max-width: 300px;
+}
+
+.dvv-preview-info {
+  padding: 6px 4px 2px;
+  font-size: 12px;
+}
+
+.dvv-preview-name {
+  font-weight: bold;
+  margin-bottom: 2px;
+}
+
+.dvv-preview-type {
+  color: #aaa;
+  margin-bottom: 2px;
+}
+
+.dvv-preview-price {
+  color: #2ecc71;
+}
+
+/* Grid layout */
+.dvv-grid {
+  display: grid;
+}
+
+.dvv-grid--desktop {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 20px;
+}
+
+.dvv-grid--mobile {
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.dvv-type-group {
+  min-width: 0;
+}
+
+.dvv-type-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: #1a1a2e;
+  padding: 6px 0;
+  font-size: 13px;
+  font-weight: bold;
+  color: #ccc;
+  border-bottom: 1px solid #444;
+  margin-bottom: 8px;
+}
+
+.dvv-stack {
+  position: relative;
+}
+
+.dvv-stack-card {
+  position: absolute;
+  left: 0;
+}
