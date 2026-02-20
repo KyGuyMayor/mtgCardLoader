@@ -14,6 +14,7 @@ import {
   useToaster,
 } from 'rsuite';
 import authFetch from '../../helpers/authFetch';
+import { CollectionTypeSelector, DeckTypeSelector } from './CollectionTypeSelectors';
 
 const { Column, HeaderCell, Cell } = Table;
 
@@ -220,6 +221,8 @@ const ImportCSVModal = ({ open, onClose, onImported }) => {
   const [selectedCollection, setSelectedCollection] = useState(null);
   const [destinationMode, setDestinationMode] = useState('existing');
   const [newCollectionName, setNewCollectionName] = useState('');
+  const [newCollectionType, setNewCollectionType] = useState('TRADE_BINDER');
+  const [newCollectionDeckType, setNewCollectionDeckType] = useState('COMMANDER');
   const [loadingCollections, setLoadingCollections] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [step, setStep] = useState('upload');
@@ -274,6 +277,8 @@ const ImportCSVModal = ({ open, onClose, onImported }) => {
     setSelectedCollection(null);
     setDestinationMode('existing');
     setNewCollectionName('');
+    setNewCollectionType('TRADE_BINDER');
+    setNewCollectionDeckType('COMMANDER');
     setStep('upload');
     setMatchProgress(0);
     setMatching(false);
@@ -546,28 +551,32 @@ const ImportCSVModal = ({ open, onClose, onImported }) => {
     let targetId = selectedCollection;
 
     if (destinationMode === 'new') {
-      setSubmitting(true);
-      try {
-        const res = await authFetch('/collections', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: newCollectionName.trim(), type: 'TRADE_BINDER' }),
-        });
-        if (!res.ok) {
-          const data = await res.json();
-          setError(data.error || 'Failed to create collection');
-          setSubmitting(false);
-          return;
-        }
-        const created = await res.json();
-        targetId = created.id;
-      } catch (err) {
-        setError('Unable to connect to server');
-        setSubmitting(false);
-        return;
-      }
-      setSubmitting(false);
-    }
+       setSubmitting(true);
+       try {
+         const payload = { name: newCollectionName.trim(), type: newCollectionType };
+         if (newCollectionType === 'DECK') {
+           payload.deck_type = newCollectionDeckType;
+         }
+         const res = await authFetch('/collections', {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify(payload),
+         });
+         if (!res.ok) {
+           const data = await res.json();
+           setError(data.error || 'Failed to create collection');
+           setSubmitting(false);
+           return;
+         }
+         const created = await res.json();
+         targetId = created.id;
+       } catch (err) {
+         setError('Unable to connect to server');
+         setSubmitting(false);
+         return;
+       }
+       setSubmitting(false);
+     }
 
     setStep('match');
     matchCards(parsedCards, targetId);
@@ -822,9 +831,63 @@ const ImportCSVModal = ({ open, onClose, onImported }) => {
                       block
                     />
                   </div>
-                </div>
+                  </div>
 
-                {csvDataRows.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                  <RadioGroup
+                    inline
+                    value={destinationMode}
+                    onChange={setDestinationMode}
+                    style={{ marginBottom: 12 }}
+                  >
+                    <Radio value="existing">Existing collection</Radio>
+                    <Radio value="new">Create new collection</Radio>
+                  </RadioGroup>
+
+                  {destinationMode === 'existing' ? (
+                    loadingCollections ? (
+                      <Loader content="Loading collections..." />
+                    ) : (
+                      <SelectPicker
+                        data={collectionOptions}
+                        value={selectedCollection}
+                        onChange={setSelectedCollection}
+                        searchable={false}
+                        block
+                        placeholder="Select destination collection"
+                      />
+                    )
+                  ) : (
+                    <>
+                      <Input
+                        value={newCollectionName}
+                        onChange={setNewCollectionName}
+                        placeholder="New collection name"
+                        style={{ marginBottom: 12 }}
+                      />
+
+                      <div style={{ marginBottom: 12 }}>
+                        <label style={{ display: 'block', marginBottom: 4, fontSize: 12, color: '#ccc' }}>Collection Type</label>
+                        <CollectionTypeSelector
+                          value={newCollectionType}
+                          onChange={setNewCollectionType}
+                        />
+                      </div>
+
+                      {newCollectionType === 'DECK' && (
+                        <div style={{ marginBottom: 12 }}>
+                          <label style={{ display: 'block', marginBottom: 4, fontSize: 12, color: '#ccc' }}>Deck Type</label>
+                          <DeckTypeSelector
+                            value={newCollectionDeckType}
+                            onChange={setNewCollectionDeckType}
+                          />
+                        </div>
+                      )}
+                    </>
+                  )}
+                  </div>
+
+                  {csvDataRows.length > 0 && (
                   <>
                     <h4 style={{ marginBottom: 8 }}>Preview ({Math.min(csvDataRows.length, 50)} of {csvDataRows.length} rows)</h4>
                     <Table
@@ -928,7 +991,7 @@ const ImportCSVModal = ({ open, onClose, onImported }) => {
             appearance="primary"
             disabled={
               (destinationMode === 'existing' && !selectedCollection) ||
-              (destinationMode === 'new' && !newCollectionName.trim())
+              (destinationMode === 'new' && (!newCollectionName.trim() || !newCollectionType || (newCollectionType === 'DECK' && !newCollectionDeckType)))
             }
             loading={submitting}
             onClick={handleContinue}
