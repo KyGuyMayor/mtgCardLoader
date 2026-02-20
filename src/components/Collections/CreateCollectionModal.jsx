@@ -3,30 +3,12 @@ import {
   Modal,
   Button,
   Form,
-  SelectPicker,
   Input,
   Message,
 } from 'rsuite';
 import authFetch from '../../helpers/authFetch';
 import { DECK_FORMAT_RULES } from '../../helpers/deckRules';
-
-const TYPE_OPTIONS = [
-  { label: 'Trade Binder', value: 'TRADE_BINDER' },
-  { label: 'Deck', value: 'DECK' },
-];
-
-const DECK_TYPE_OPTIONS = [
-  { label: 'Commander', value: 'COMMANDER' },
-  { label: 'Standard', value: 'STANDARD' },
-  { label: 'Modern', value: 'MODERN' },
-  { label: 'Legacy', value: 'LEGACY' },
-  { label: 'Vintage', value: 'VINTAGE' },
-  { label: 'Pioneer', value: 'PIONEER' },
-  { label: 'Pauper', value: 'PAUPER' },
-  { label: 'Draft', value: 'DRAFT' },
-  { label: 'Planar Standard', value: 'PLANAR_STANDARD' },
-  { label: 'Other', value: 'OTHER' },
-];
+import { CollectionTypeSelector, DeckTypeSelector } from './CollectionTypeSelectors';
 
 const INITIAL_FORM = {
   name: '',
@@ -189,13 +171,9 @@ const CreateCollectionModal = ({ open, onClose, onCreated }) => {
 
           <Form.Group>
             <Form.ControlLabel>Type</Form.ControlLabel>
-            <SelectPicker
-              data={TYPE_OPTIONS}
+            <CollectionTypeSelector
               value={formData.type}
               onChange={(value) => setField('type', value)}
-              searchable={false}
-              block
-              placeholder="Select type"
             />
           </Form.Group>
 
@@ -203,13 +181,9 @@ const CreateCollectionModal = ({ open, onClose, onCreated }) => {
             <>
               <Form.Group>
                 <Form.ControlLabel>Deck Type</Form.ControlLabel>
-                <SelectPicker
-                  data={DECK_TYPE_OPTIONS}
+                <DeckTypeSelector
                   value={formData.deck_type}
                   onChange={(value) => setField('deck_type', value)}
-                  searchable={false}
-                  block
-                  placeholder="Select deck type"
                 />
               </Form.Group>
 
