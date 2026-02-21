@@ -7,7 +7,10 @@ import {
   Content,
   FlexboxGrid,
   Panel,
-  Button
+  Button,
+  Badge,
+  Loader,
+  Divider
 } from 'rsuite';
 
 import CardStat from './CardStat';
@@ -92,11 +95,20 @@ const getLoyalty = (card, faceIndex = 0) => {
   return face?.loyalty || null;
 };
 
+const RULINGS_PANEL_MARGIN_TOP = 20;
+const RULINGS_HEADER_GAP = 8;
+const RULINGS_META_FONT_SIZE = 12;
+const RULINGS_ITEM_MARGIN_BOTTOM = 4;
+const RULINGS_DIVIDER_MARGIN = '8px 0';
+
 const CardView = () => {
   const {id} = useParams();
   const [card, setCard] =  useState();
   const [activeFace, setActiveFace] = useState(0);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [rulings, setRulings] = useState([]);
+  const [rulingsLoading, setRulingsLoading] = useState(false);
+  const [rulingsError, setRulingsError] = useState(false);
   const { isAuthenticated } = useAuth();
 
   const toggleFace = () => {
@@ -112,6 +124,26 @@ const CardView = () => {
        
     fetchData();
   }, [id]);
+
+  useEffect(() => {
+    if (!card?.id) return;
+    const fetchRulings = async () => {
+      setRulingsLoading(true);
+      setRulingsError(false);
+      try {
+        const res = await fetch(`/cards/${card.id}/rulings`);
+        if (!res.ok) throw new Error('Failed to fetch rulings');
+        const data = await res.json();
+        const sorted = [...data].sort((a, b) => new Date(b.published_at) - new Date(a.published_at));
+        setRulings(sorted);
+      } catch {
+        setRulingsError(true);
+      } finally {
+        setRulingsLoading(false);
+      }
+    };
+    fetchRulings();
+  }, [card?.id]);
 
   useEffect(() => {
     if (isDoubleFaced(card)) {
@@ -153,6 +185,34 @@ const CardView = () => {
                   <h5 style={{marginTop: "25px"}}>Purchase Links</h5>
                   <Link url={card?.purchase_uris?.tcgplayer} title="TCG Player" />
                   <Link url={card?.purchase_uris?.cardmarket} title="Card Market" />
+                  <Panel
+                    collapsible
+                    defaultExpanded
+                    bordered
+                    header={
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: RULINGS_HEADER_GAP }}>
+                        Rulings
+                        {rulings.length > 0 && <Badge content={rulings.length} />}
+                      </span>
+                    }
+                    style={{ marginTop: RULINGS_PANEL_MARGIN_TOP }}
+                  >
+                    {rulingsLoading && <Loader content="Loading rulings..." />}
+                    {rulingsError && <p style={{ color: '#aaa' }}>Unable to load rulings.</p>}
+                    {!rulingsLoading && !rulingsError && rulings.length === 0 && (
+                      <p style={{ color: '#aaa' }}>No rulings available for this card.</p>
+                    )}
+                    {!rulingsLoading && !rulingsError && rulings.map((ruling, i) => (
+                      <div key={i}>
+                        <p style={{ whiteSpace: 'pre-wrap', marginBottom: RULINGS_ITEM_MARGIN_BOTTOM }}>{ruling.comment}</p>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: RULINGS_META_FONT_SIZE, color: '#888', marginBottom: RULINGS_ITEM_MARGIN_BOTTOM }}>
+                          <span>{new Date(ruling.published_at + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                          <span>{ruling.source === 'wotc' ? 'WotC' : 'Scryfall'}</span>
+                        </div>
+                        {i < rulings.length - 1 && <Divider style={{ margin: RULINGS_DIVIDER_MARGIN }} />}
+                      </div>
+                    ))}
+                  </Panel>
                   {isAuthenticated && (
                     <Button
                       appearance="primary"
