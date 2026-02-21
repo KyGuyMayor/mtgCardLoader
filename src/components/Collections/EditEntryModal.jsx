@@ -11,21 +11,7 @@ import {
   ButtonGroup,
 } from 'rsuite';
 import authFetch from '../../helpers/authFetch';
-
-const CONDITION_OPTIONS = [
-  { label: 'Mint', value: 'MINT' },
-  { label: 'Near Mint', value: 'NM' },
-  { label: 'Lightly Played', value: 'LP' },
-  { label: 'Moderately Played', value: 'MP' },
-  { label: 'Heavily Played', value: 'HP' },
-  { label: 'Damaged', value: 'DAMAGED' },
-];
-
-const FINISH_OPTIONS = [
-  { label: 'Non-Foil', value: 'nonfoil' },
-  { label: 'Foil', value: 'foil' },
-  { label: 'Etched', value: 'etched' },
-];
+import { CONDITION_OPTIONS, FINISH_OPTIONS } from './CardEntryFormOptions';
 
 const EditEntryModal = ({ open, onClose, entry, collectionId, onUpdated }) => {
   const [formData, setFormData] = useState({

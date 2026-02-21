@@ -15,8 +15,6 @@ import {
   useToaster,
   Panel,
   Progress,
-  Tooltip,
-  Whisper,
 } from 'rsuite';
 import { ArrowDown } from '@rsuite/icons';
 
@@ -27,6 +25,8 @@ import ExportCSVModal from './ExportCSVModal';
 import DeckVisualView from './DeckVisualView';
 import authFetch from '../../helpers/authFetch';
 import { DECK_FORMAT_RULES } from '../../helpers/deckRules';
+import { RARITY_ORDER, CONDITION_ORDER, FINISH_ORDER } from './CardAttributeDefaults';
+import { GainLossCell, FinishCell, NameCell } from './TableCells';
 import './CollectionDetail.css';
 
 const { Column, HeaderCell, Cell } = Table;
@@ -56,40 +56,6 @@ const COLORS = {
   loss: '#e74c3c',
 };
 
-const GainLossCell = ({ rowData, ...props }) => {
-  const val = rowData?.gain_loss_raw;
-  if (val == null) return <Cell {...props} />;
-  const color = val > 0 ? COLORS.gain : val < 0 ? COLORS.loss : COLORS.muted;
-  const prefix = val > 0 ? '+' : '';
-  return (
-    <Cell {...props}>
-      <span style={{ color }}>{prefix}${val.toFixed(2)}</span>
-    </Cell>
-  );
-};
-
-const RARITY_ORDER = {
-  'common': 0,
-  'uncommon': 1,
-  'rare': 2,
-  'mythic': 3,
-};
-
-const CONDITION_ORDER = {
-  'MINT': 0,
-  'NM': 1,
-  'LP': 2,
-  'MP': 3,
-  'HP': 4,
-  'DAMAGED': 5,
-};
-
-const FINISH_ORDER = {
-  'nonfoil': 0,
-  'foil': 1,
-  'etched': 2,
-};
-
 const defaultColumns = [
   { key: 'name', label: 'Name', fixed: true, flexGrow: 2, sortable: true },
   { key: 'type_line', label: 'Type', flexGrow: 1, sortable: true },
@@ -107,97 +73,6 @@ const desktopColumns = [
 ];
 
 const quantityColumn = { key: 'quantity', label: 'Quantity', width: 90, sortable: true };
-
-const FINISH_LABELS = {
-  'nonfoil': 'Non-Foil',
-  'foil': 'Foil',
-  'etched': 'Etched',
-};
-
-const FINISH_COLORS = {
-  'nonfoil': '#aaa',
-  'foil': '#f39c12',
-  'etched': '#9b59b6',
-};
-
-const FinishCell = ({ rowData, ...props }) => {
-  const finish = rowData?.finish || 'nonfoil';
-  const label = FINISH_LABELS[finish] || 'Non-Foil';
-  const color = FINISH_COLORS[finish] || '#aaa';
-  return (
-    <Cell {...props}>
-      <span style={{ color }}>{label}</span>
-    </Cell>
-  );
-};
-
-const NameCell = ({ rowData, errorMap, warningMap, ...props }) => {
-  const scryfallId = rowData?.scryfall_id;
-  const error = scryfallId ? errorMap[scryfallId] : null;
-  const warning = scryfallId ? warningMap[scryfallId] : null;
-  const violation = error || warning;
-  const isCommander = rowData?.is_commander;
-
-  return (
-    <Cell {...props}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        {violation && (
-          <Whisper
-            placement="top"
-            controlId={`violation-${scryfallId}`}
-            speaker={
-              <Tooltip>
-                <div style={{ maxWidth: 250 }}>
-                  <strong>{violation.type}:</strong> {violation.message}
-                </div>
-              </Tooltip>
-            }
-          >
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 18,
-                height: 18,
-                borderRadius: '50%',
-                backgroundColor: error ? '#e74c3c' : '#f39c12',
-                color: '#fff',
-                fontSize: 12,
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                flexShrink: 0,
-              }}
-            >
-              {error ? '✕' : '⚠'}
-            </span>
-          </Whisper>
-        )}
-        {isCommander && (
-          <span
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 20,
-              height: 20,
-              backgroundColor: '#f1c40f',
-              color: '#000',
-              fontSize: 10,
-              fontWeight: 'bold',
-              borderRadius: '50%',
-              flexShrink: 0,
-            }}
-            title="Commander"
-          >
-            ♛
-          </span>
-        )}
-        <span>{rowData?.name || 'Unknown Card'}</span>
-      </div>
-    </Cell>
-  );
-};
 
 const CollectionDetail = () => {
   const { id } = useParams();
