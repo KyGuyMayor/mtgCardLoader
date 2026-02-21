@@ -30,37 +30,38 @@ const INITIAL_FORM = {
   is_sideboard: false,
 };
 
-const AddToCollectionModal = ({ open, onClose, scryfallId, cardName, card }) => {
+const AddToCollectionModal = ({ open, onClose, onSuccess, scryfallId, cardName, card, preSelectedCollectionId }) => {
   const [formData, setFormData] = useState({ ...INITIAL_FORM });
   const [collections, setCollections] = useState([]);
   const [loadingCollections, setLoadingCollections] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [warnings, setWarnings] = useState([]);
-  const [loadingCollectionDetails, setLoadingCollectionDetails] = useState(false);
-  const [collectionDetails, setCollectionDetails] = useState(null);
   const toaster = useToaster();
 
   useEffect(() => {
-    if (open) {
-      fetchCollections();
-    }
-  }, [open]);
-
-  const fetchCollections = async () => {
-    setLoadingCollections(true);
-    try {
-      const response = await authFetch('/collections');
-      if (response.ok) {
-        const data = await response.json();
-        setCollections(data);
+    if (!open) return;
+    let cancelled = false;
+    const fetchCollections = async () => {
+      setLoadingCollections(true);
+      try {
+        const response = await authFetch('/collections');
+        if (response.ok && !cancelled) {
+          const data = await response.json();
+          setCollections(data);
+          if (preSelectedCollectionId) {
+            setField('collection_id', preSelectedCollectionId);
+          }
+        }
+      } catch (err) {
+        // silent fail, user will see empty dropdown
+      } finally {
+        if (!cancelled) setLoadingCollections(false);
       }
-    } catch (err) {
-      // silent fail, user will see empty dropdown
-    } finally {
-      setLoadingCollections(false);
-    }
-  };
+    };
+    fetchCollections();
+    return () => { cancelled = true; };
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectedCollection = collections.find((c) => c.id === formData.collection_id);
   const isCommander = selectedCollection?.type === 'DECK' && selectedCollection?.deck_type === 'COMMANDER';
@@ -124,7 +125,13 @@ const AddToCollectionModal = ({ open, onClose, scryfallId, cardName, card }) => 
         { placement: 'topCenter', duration: 3000 }
       );
 
-      handleClose();
+      setFormData({ ...INITIAL_FORM });
+      setError('');
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        onClose();
+      }
     } catch (err) {
       setError('Unable to connect to server');
     } finally {
@@ -143,7 +150,6 @@ const AddToCollectionModal = ({ open, onClose, scryfallId, cardName, card }) => 
           validateCollectionForDeck(value);
         } else {
           setWarnings([]);
-          setCollectionDetails(null);
         }
       }
       return next;
@@ -153,7 +159,6 @@ const AddToCollectionModal = ({ open, onClose, scryfallId, cardName, card }) => 
   const validateCollectionForDeck = async (collectionId) => {
     const col = collections.find((c) => c.id === collectionId);
     setWarnings([]);
-    setCollectionDetails(null);
 
     // Only validate for DECK type collections
     if (!col || col.type !== 'DECK') {
@@ -166,7 +171,6 @@ const AddToCollectionModal = ({ open, onClose, scryfallId, cardName, card }) => 
       return;
     }
 
-    setLoadingCollectionDetails(true);
     try {
       // Fetch collection details with entries
       const response = await authFetch(`/collections/${collectionId}?limit=1000`);
@@ -174,7 +178,6 @@ const AddToCollectionModal = ({ open, onClose, scryfallId, cardName, card }) => 
         return;
       }
       const details = await response.json();
-      setCollectionDetails(details);
 
       // Only validate if we have a card object with necessary data
       if (!card) {
@@ -265,8 +268,6 @@ const AddToCollectionModal = ({ open, onClose, scryfallId, cardName, card }) => 
       setWarnings(validationWarnings);
     } catch (err) {
       console.error('Failed to validate collection:', err);
-    } finally {
-      setLoadingCollectionDetails(false);
     }
   };
 
@@ -304,6 +305,7 @@ const AddToCollectionModal = ({ open, onClose, scryfallId, cardName, card }) => 
                 searchable={false}
                 block
                 placeholder="Select a collection"
+                disabled={!!preSelectedCollectionId}
               />
             </Form.Group>
 
