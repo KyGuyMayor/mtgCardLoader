@@ -19,7 +19,9 @@ import {
 import { ArrowDown } from '@rsuite/icons';
 
 import NavigationBar from '../Shared/NavigationBar';
+import SearchBar from '../Shared/SearchBar';
 import EditEntryModal from './EditEntryModal';
+import AddToCollectionModal from './AddToCollectionModal';
 import CollectionFilters from './CollectionFilters';
 import ExportCSVModal from './ExportCSVModal';
 import DeckVisualView from './DeckVisualView';
@@ -108,6 +110,11 @@ const CollectionDetail = () => {
   const [validationResult, setValidationResult] = useState(null);
   const [deckSection, setDeckSection] = useState('all');
   const [viewMode, setViewMode] = useState('table');
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [addCardData, setAddCardData] = useState(null);
+  const [cardAddedDuringSearch, setCardAddedDuringSearch] = useState(false);
   const priceCacheRef = useRef({});
   const toaster = useToaster();
   const isMountedRef = useRef(true);
@@ -767,6 +774,47 @@ const CollectionDetail = () => {
     }
   };
 
+  const searchCards = async (term) => {
+    const results = await fetch(`/cards/search/${term}`);
+    const data = await results.text();
+    return data;
+  };
+
+  const handleSearchSelect = (card) => {
+    setSearchModalOpen(false);
+    setAddCardData({
+      scryfallId: card.id,
+      cardName: card.name,
+      card: card,
+    });
+    setAddModalOpen(true);
+  };
+
+  const handleAddModalClose = () => {
+    setAddModalOpen(false);
+    // Re-open search modal for adding more cards
+    setSearchTerm('');
+    setSearchModalOpen(true);
+  };
+
+  const handleAddModalSuccess = () => {
+    setAddModalOpen(false);
+    setCardAddedDuringSearch(true);
+    setRefreshKey((k) => k + 1);
+    // Re-open search modal for adding more cards
+    setSearchTerm('');
+    setSearchModalOpen(true);
+  };
+
+  const handleSearchModalClose = () => {
+    setSearchModalOpen(false);
+    setSearchTerm('');
+    setAddCardData(null);
+    if (cardAddedDuringSearch) {
+      setCardAddedDuringSearch(false);
+    }
+  };
+
   const CheckboxCell = ({ rowData, ...props }) => (
     <Cell {...props} style={{ padding: '6px 0', textAlign: 'center' }}>
       <div
@@ -1176,6 +1224,13 @@ const CollectionDetail = () => {
                     </Button>
                   </>
                 )}
+                <Button
+                  size="xs"
+                  appearance="primary"
+                  onClick={() => { setSearchTerm(''); setSearchModalOpen(true); }}
+                >
+                  Add Card
+                </Button>
                 {tableData.length > 0 && (
                   <Button
                     size="xs"
@@ -1381,6 +1436,40 @@ const CollectionDetail = () => {
               onClose={() => setExportModalOpen(false)}
               collectionName={collection?.name}
               entries={tableData}
+            />
+
+            <Modal
+              open={searchModalOpen}
+              onClose={handleSearchModalClose}
+              size={isMobile ? 'full' : 'md'}
+            >
+              <Modal.Header>
+                <Modal.Title>Search Cards to Add</Modal.Title>
+              </Modal.Header>
+              <Modal.Body>
+                <SearchBar
+                  term={searchTerm}
+                  setTerm={setSearchTerm}
+                  retrieve={searchCards}
+                  onSelect={handleSearchSelect}
+                  placeholder="Enter a card name. Minimum 3 characters to search"
+                />
+              </Modal.Body>
+              <Modal.Footer>
+                <Button onClick={handleSearchModalClose} appearance="subtle">
+                  Close
+                </Button>
+              </Modal.Footer>
+            </Modal>
+
+            <AddToCollectionModal
+              open={addModalOpen}
+              onClose={handleAddModalClose}
+              onSuccess={handleAddModalSuccess}
+              scryfallId={addCardData?.scryfallId}
+              cardName={addCardData?.cardName}
+              card={addCardData?.card}
+              preSelectedCollectionId={parseInt(id, 10)}
             />
 
             <Modal open={validationOpen} onClose={() => setValidationOpen(false)} size="lg">

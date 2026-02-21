@@ -37,7 +37,7 @@ const EditEntryModal = ({ open, onClose, entry, collectionId, onUpdated }) => {
       });
       setError('');
     }
-  }, [open, entry?.id]);
+  }, [open, entry]);
 
   const handleClose = () => {
     setError('');
