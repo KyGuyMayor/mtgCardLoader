@@ -13,21 +13,7 @@ import {
 } from 'rsuite';
 import authFetch from '../../helpers/authFetch';
 import { DECK_FORMAT_RULES, isBasicLand } from '../../helpers/deckRules';
-
-const CONDITION_OPTIONS = [
-  { label: 'Mint', value: 'MINT' },
-  { label: 'Near Mint', value: 'NM' },
-  { label: 'Lightly Played', value: 'LP' },
-  { label: 'Moderately Played', value: 'MP' },
-  { label: 'Heavily Played', value: 'HP' },
-  { label: 'Damaged', value: 'DAMAGED' },
-];
-
-const FINISH_OPTIONS = [
-  { label: 'Non-Foil', value: 'nonfoil' },
-  { label: 'Foil', value: 'foil' },
-  { label: 'Etched', value: 'etched' },
-];
+import { CONDITION_OPTIONS, FINISH_OPTIONS } from './CardEntryFormOptions';
 
 const CONSTRUCTED_DECK_TYPES = [
   'COMMANDER', 'STANDARD', 'MODERN', 'LEGACY', 'VINTAGE', 'PIONEER', 'PAUPER', 'PLANAR_STANDARD',
