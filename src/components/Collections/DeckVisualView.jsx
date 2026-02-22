@@ -28,6 +28,13 @@ const SCRYFALL_SMALL_HEIGHT = 204;
 
 // Visual stack layout
 const CARD_SCALE = isMobile ? 0.7 : 1;
+
+const COLORS = {
+  dropHighlight: '#3498db',
+  dropHighlightBg: 'rgba(52, 152, 219, 0.1)',
+};
+const Z_INDEX = { dropOverlay: 100 };
+const BORDER_RADIUS = 4;
 const CARD_WIDTH = Math.round(SCRYFALL_SMALL_WIDTH * CARD_SCALE);
 const CARD_HEIGHT = Math.round(SCRYFALL_SMALL_HEIGHT * CARD_SCALE);
 const CARD_OFFSET = isMobile ? 20 : 30;
@@ -216,9 +223,10 @@ const HoverPreview = ({ entry, position }) => {
   );
 };
 
-const DeckVisualView = ({ sortedData, collection, navigate }) => {
+const DeckVisualView = ({ sortedData, collection, navigate, onCardDrop }) => {
   const [previewEntry, setPreviewEntry] = useState(null);
   const [previewPosition, setPreviewPosition] = useState(null);
+  const [dragOverActive, setDragOverActive] = useState(false);
   const clearTimerRef = useRef(null);
 
   const handlePreview = useCallback((entry, rect) => {
@@ -258,11 +266,48 @@ const DeckVisualView = ({ sortedData, collection, navigate }) => {
 
   const isDeck = collection?.type === 'DECK';
 
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+    setDragOverActive(true);
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverActive(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setDragOverActive(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverActive(false);
+    if (onCardDrop) {
+      onCardDrop(e);
+    }
+  };
+
   return (
     <div>
       <ManaCurve sortedData={sortedData} isDeck={isDeck} />
 
-      <div className={`dvv-grid ${isMobile ? 'dvv-grid--mobile' : 'dvv-grid--desktop'}`}>
+      <div 
+        className={`dvv-grid ${isMobile ? 'dvv-grid--mobile' : 'dvv-grid--desktop'}`}
+        onDragOver={handleDragOver}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        style={{ position: 'relative' }}
+      >
         {typeGroups.map(({ type, label, cards, totalCount }) => (
           <div key={type} className="dvv-type-group">
             <div className="dvv-type-header">
@@ -293,10 +338,31 @@ const DeckVisualView = ({ sortedData, collection, navigate }) => {
             </div>
           </div>
         ))}
-      </div>
+        {dragOverActive && (
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            border: `2px dashed ${COLORS.dropHighlight}`,
+            backgroundColor: COLORS.dropHighlightBg,
+            borderRadius: BORDER_RADIUS,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: Z_INDEX.dropOverlay,
+            pointerEvents: 'none',
+          }}>
+            <div style={{ textAlign: 'center', color: COLORS.dropHighlight, fontWeight: 'bold' }}>
+              📎 Drop card here
+            </div>
+          </div>
+        )}
+        </div>
 
-      <HoverPreview entry={previewEntry} position={previewPosition} />
-    </div>
+        <HoverPreview entry={previewEntry} position={previewPosition} />
+        </div>
   );
 };
 

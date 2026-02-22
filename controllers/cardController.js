@@ -144,6 +144,71 @@ exports.rulings = async (req, res) => {
   }
 };
 
+exports.named = async (req, res) => {
+  const { exact, fuzzy } = req.query;
+
+  if (!exact && !fuzzy) {
+    return res.status(400).json({ error: 'Bad Request', message: 'Query param exact or fuzzy is required' });
+  }
+
+  const mode = exact ? 'exact' : 'fuzzy';
+  const name = exact || fuzzy;
+  const cacheKey = `named:${mode}:${name.toLowerCase()}`;
+  const cached = ttlCache.get(cacheKey);
+  if (cached) {
+    res.set('Cache-Control', CACHE_MAX_AGE_HEADER);
+    return res.json(cached);
+  }
+
+  try {
+    const data = await rateLimitedRequest(() => {
+      return new Promise((resolve, reject) => {
+        const queryParam = `${mode}=${encodeURIComponent(name)}`;
+        const options = {
+          hostname: 'api.scryfall.com',
+          path: `/cards/named?${queryParam}`,
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'MTGCardLoader/1.0',
+          },
+          agent: keepAliveAgent,
+        };
+
+        const request = https.request(options, (response) => {
+          let body = '';
+          response.on('data', (chunk) => { body += chunk; });
+          response.on('end', () => {
+            try {
+              const parsed = JSON.parse(body);
+              if (response.statusCode === 404 || parsed.status === 404) {
+                reject({ statusCode: 404 });
+              } else {
+                resolve(parsed);
+              }
+            } catch (err) {
+              reject(new Error('Failed to parse Scryfall response'));
+            }
+          });
+        });
+
+        request.on('error', reject);
+        request.end();
+      });
+    });
+
+    ttlCache.set(cacheKey, data, CACHE_TTL_MS);
+    res.set('Cache-Control', CACHE_MAX_AGE_HEADER);
+    return res.json(data);
+  } catch (e) {
+    if (handleTimeoutError(e, res)) return;
+    if (e.statusCode === 404) {
+      return res.status(404).json({ error: 'Not Found', message: 'No card found matching that name' });
+    }
+    return res.status(500).json({ error: 'Internal Server Error', message: e.message });
+  }
+};
+
 exports.collection = async (req, res) => {
   const { identifiers } = req.body;
 

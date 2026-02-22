@@ -7,6 +7,8 @@ router.get('/', cardController.index);
 
 router.post('/collection', cardController.collection);
 
+router.get('/named', cardController.named);
+
 router.get('/:id/rulings', cardController.rulings);
 
 router.get('/:id', cardController.get);

@@ -27,6 +27,7 @@ import ExportCSVModal from './ExportCSVModal';
 import DeckVisualView from './DeckVisualView';
 import authFetch from '../../helpers/authFetch';
 import { DECK_FORMAT_RULES } from '../../helpers/deckRules';
+import { parseDropData, resolveCardFromDrop } from '../../helpers/dragDropCardParser';
 import { RARITY_ORDER, CONDITION_ORDER, FINISH_ORDER } from './CardAttributeDefaults';
 import { GainLossCell, FinishCell, NameCell } from './TableCells';
 import './CollectionDetail.css';
@@ -56,7 +57,14 @@ const COLORS = {
   muted: '#aaa',
   gain: '#2ecc71',
   loss: '#e74c3c',
+  dropHighlight: '#3498db',
+  dropHighlightBg: 'rgba(52, 152, 219, 0.1)',
+  hintText: '#7a8a99',
 };
+
+const TOAST_DURATION = 5000;
+const Z_INDEX = { dropOverlay: 100, dropLoader: 101 };
+const BORDER_RADIUS = 4;
 
 const defaultColumns = [
   { key: 'name', label: 'Name', fixed: true, flexGrow: 2, sortable: true },
@@ -115,6 +123,9 @@ const CollectionDetail = () => {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [addCardData, setAddCardData] = useState(null);
   const [cardAddedDuringSearch, setCardAddedDuringSearch] = useState(false);
+  const [dragOverActive, setDragOverActive] = useState(false);
+  const [resolvingDrop, setResolvingDrop] = useState(false);
+  const addedViaDropRef = useRef(false);
   const priceCacheRef = useRef({});
   const toaster = useToaster();
   const isMountedRef = useRef(true);
@@ -792,6 +803,10 @@ const CollectionDetail = () => {
 
   const handleAddModalClose = () => {
     setAddModalOpen(false);
+    if (addedViaDropRef.current) {
+      addedViaDropRef.current = false;
+      return;
+    }
     // Re-open search modal for adding more cards
     setSearchTerm('');
     setSearchModalOpen(true);
@@ -799,8 +814,12 @@ const CollectionDetail = () => {
 
   const handleAddModalSuccess = () => {
     setAddModalOpen(false);
-    setCardAddedDuringSearch(true);
     setRefreshKey((k) => k + 1);
+    if (addedViaDropRef.current) {
+      addedViaDropRef.current = false;
+      return;
+    }
+    setCardAddedDuringSearch(true);
     // Re-open search modal for adding more cards
     setSearchTerm('');
     setSearchModalOpen(true);
@@ -813,6 +832,80 @@ const CollectionDetail = () => {
     if (cardAddedDuringSearch) {
       setCardAddedDuringSearch(false);
     }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+    setDragOverActive(true);
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverActive(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setDragOverActive(false);
+    }
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverActive(false);
+
+    const parsed = parseDropData(e.dataTransfer);
+    if (!parsed) {
+      toaster.push(
+        <Message showIcon type="error" closable>
+          Could not identify the dropped card. Try dragging a card image from EDHREC, TCGPlayer, or CardKingdom.
+        </Message>,
+        { placement: 'topCenter', duration: TOAST_DURATION }
+      );
+      return;
+    }
+
+    setResolvingDrop(true);
+    try {
+      const card = await resolveCardFromDrop(e.dataTransfer);
+      if (card) {
+        addedViaDropRef.current = true;
+        setAddCardData({
+          scryfallId: card.id,
+          cardName: card.name,
+          card: card,
+        });
+        setAddModalOpen(true);
+      } else {
+        toaster.push(
+          <Message showIcon type="error" closable>
+            Could not find that card in Scryfall. Try dragging a different card.
+          </Message>,
+          { placement: 'topCenter', duration: TOAST_DURATION }
+        );
+      }
+    } catch (error) {
+      console.error('Error resolving dropped card:', error);
+      toaster.push(
+        <Message showIcon type="error" closable>
+          Error loading card details. Please try again.
+        </Message>,
+        { placement: 'topCenter', duration: TOAST_DURATION }
+      );
+    } finally {
+      setResolvingDrop(false);
+    }
+  };
+
+  const handleCardDropFromVisual = async (e) => {
+    // Reuse the same drop handling logic
+    await handleDrop(e);
   };
 
   const CheckboxCell = ({ rowData, ...props }) => (
@@ -1325,19 +1418,69 @@ const CollectionDetail = () => {
 
             {renderStatsSection()}
 
-            {tableData.length === 0 && !cardLoading ? (
-              <div style={{ textAlign: 'center', padding: `${SPACING.emptyPadding}px 0`, color: COLORS.muted }}>
-                <p style={{ fontSize: 18, marginBottom: 8 }}>No cards in this collection</p>
-                <p>Add cards from card pages to start building your collection.</p>
-              </div>
-            ) : viewMode === 'visual' ? (
-              <DeckVisualView
-                sortedData={sortedData}
-                collection={collection}
-                navigate={navigate}
-              />
-            ) : (
-               <Table
+            <div
+              onDragOver={handleDragOver}
+              onDragEnter={handleDragEnter}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              style={{ position: 'relative' }}
+            >
+              {dragOverActive && (
+                <div style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  border: `2px dashed ${COLORS.dropHighlight}`,
+                  backgroundColor: COLORS.dropHighlightBg,
+                  borderRadius: BORDER_RADIUS,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: Z_INDEX.dropOverlay,
+                  pointerEvents: 'none',
+                }}>
+                  <div style={{ textAlign: 'center', color: COLORS.dropHighlight, fontWeight: 'bold' }}>
+                    📎 Drop card here to add to collection
+                  </div>
+                </div>
+              )}
+
+              {resolvingDrop && (
+                <div style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  zIndex: Z_INDEX.dropLoader,
+                }}>
+                  <Loader content="Resolving card..." />
+                </div>
+              )}
+
+              {tableData.length === 0 && !cardLoading ? (
+                <div style={{ 
+                  textAlign: 'center', 
+                  padding: `${SPACING.emptyPadding}px 0`, 
+                  color: COLORS.muted,
+                  border: dragOverActive ? `2px dashed ${COLORS.dropHighlight}` : 'none',
+                  borderRadius: dragOverActive ? BORDER_RADIUS : 0,
+                  transition: 'all 0.2s ease',
+                }}>
+                  <p style={{ fontSize: 18, marginBottom: 8 }}>No cards in this collection</p>
+                  <p>Add cards from card pages to start building your collection.</p>
+                  <p style={{ fontSize: 12, marginTop: 16, color: COLORS.hintText }}>💡 Drag card images from EDHREC, TCGPlayer, or CardKingdom to add cards</p>
+                </div>
+              ) : viewMode === 'visual' ? (
+                <DeckVisualView
+                  sortedData={sortedData}
+                  collection={collection}
+                  navigate={navigate}
+                  onCardDrop={handleCardDropFromVisual}
+                />
+              ) : (
+                 <Table
                  loading={cardLoading}
                  data={sortedData}
                  height={window.innerHeight - 250}
@@ -1385,9 +1528,10 @@ const CollectionDetail = () => {
                    </Column>
                  ))}
                </Table>
-            )}
+               )}
+               </div>
 
-            <EditEntryModal
+               <EditEntryModal
               open={editModalOpen}
               onClose={handleEditClose}
               entry={editEntry}
