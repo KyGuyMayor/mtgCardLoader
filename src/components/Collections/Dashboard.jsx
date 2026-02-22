@@ -65,6 +65,7 @@ const STATUS_COLORS = {
 
 const Dashboard = () => {
   const [collections, setCollections] = useState([]);
+  const [sharedCollections, setSharedCollections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -81,15 +82,27 @@ const Dashboard = () => {
     setLoading(true);
     setError('');
     try {
-      const response = await authFetch('/collections');
+      // Fetch owned collections and shared-with-me in parallel
+      const [ownedResp, sharedResp] = await Promise.all([
+        authFetch('/collections'),
+        authFetch('/collections/shared-with-me'),
+      ]);
 
-      if (!response.ok) {
+      if (!ownedResp.ok) {
         setError('Failed to load collections');
         return;
       }
 
-      const data = await response.json();
-      setCollections(data);
+      const ownedData = await ownedResp.json();
+      setCollections(ownedData);
+
+      // Fetch shared collections (errors are non-fatal)
+      if (sharedResp.ok) {
+        const sharedData = await sharedResp.json();
+        setSharedCollections(sharedData);
+      } else {
+        setSharedCollections([]);
+      }
     } catch (err) {
       setError('Unable to connect to server');
     } finally {
@@ -356,6 +369,43 @@ const Dashboard = () => {
     );
   };
 
+  const visibilityBadge = (visibility) => {
+    if (visibility === 'PRIVATE') return null; // PRIVATE has no badge
+    
+    const badgeConfig = {
+      INVITE_ONLY: { label: 'Shared', color: '#6c757d' },
+      PUBLIC: { label: 'Public', color: '#17a2b8' },
+    };
+
+    const config = badgeConfig[visibility];
+    if (!config) return null;
+
+    const tooltipText = visibility === 'INVITE_ONLY' 
+      ? 'Visible to invited users'
+      : 'Visible to anyone with the link';
+
+    return (
+      <Whisper
+        placement="top"
+        trigger="hover"
+        speaker={<Tooltip>{tooltipText}</Tooltip>}
+      >
+        <span
+          style={{
+            backgroundColor: config.color,
+            color: '#fff',
+            padding: '2px 8px',
+            borderRadius: 4,
+            fontSize: FONT.badgeLabel,
+            marginLeft: SPACING.badgeMarginLeft,
+          }}
+        >
+          {config.label}
+        </span>
+      </Whisper>
+    );
+  };
+
   const styles = {
     container: {
       maxWidth: SPACING.containerMaxWidth,
@@ -448,6 +498,7 @@ const Dashboard = () => {
                             {collection.name}
                           </span>
                           {typeBadge(collection.type)}
+                          {visibilityBadge(collection.visibility)}
                           {collection.deck_type && (
                             <span
                               style={{
@@ -498,6 +549,49 @@ const Dashboard = () => {
                   </FlexboxGrid.Item>
                 ))}
               </FlexboxGrid>
+            )}
+
+            {sharedCollections.length > 0 && (
+              <>
+                <h2 style={{ marginTop: 32, marginBottom: 16, fontSize: 18 }}>Shared with Me</h2>
+                <FlexboxGrid>
+                  {sharedCollections.map((collection) => (
+                    <FlexboxGrid.Item colspan={24} key={`shared-${collection.id}`} style={styles.card}>
+                      <Panel
+                        bordered
+                        bodyFill
+                        onClick={() => navigate(`/shared/${collection.share_slug}`)}
+                        style={{ padding: SPACING.cardPadding, opacity: 0.9 }}
+                      >
+                        <div style={styles.cardHeader}>
+                          <div style={styles.cardTitle}>
+                            <span style={{ fontSize: FONT.collectionName, fontWeight: 600 }}>
+                              {collection.name}
+                            </span>
+                            {typeBadge(collection.type)}
+                            {collection.deck_type && (
+                              <span style={{ fontSize: FONT.deckType, color: COLORS.muted, marginLeft: SPACING.badgeMarginLeft }}>
+                                {collection.deck_type}
+                              </span>
+                            )}
+                          </div>
+                          <div style={styles.actions}>
+                            <Badge content={`${collection.card_count} cards`} />
+                          </div>
+                        </div>
+                        <p style={{ marginTop: SPACING.descriptionMarginTop, color: COLORS.muted, fontSize: FONT.description }}>
+                          Shared by <strong>{collection.owner_email}</strong>
+                        </p>
+                        {collection.description && (
+                          <p style={{ marginTop: 8, color: COLORS.muted, fontSize: FONT.description }}>
+                            {collection.description}
+                          </p>
+                        )}
+                      </Panel>
+                    </FlexboxGrid.Item>
+                  ))}
+                </FlexboxGrid>
+              </>
             )}
           </div>
 

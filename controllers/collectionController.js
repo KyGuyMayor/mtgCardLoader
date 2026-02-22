@@ -1,5 +1,6 @@
 const db = require('../src/db');
 const https = require('https');
+const { randomUUID } = require('crypto');
 const { rateLimitedRequest, RateLimitTimeoutError } = require('../src/helpers/rateLimiter');
 const { DECK_FORMAT_RULES, isBasicLand } = require('../src/helpers/deckRules');
 
@@ -8,6 +9,7 @@ const VALID_DECK_TYPES = [
   'COMMANDER', 'STANDARD', 'MODERN', 'LEGACY',
   'VINTAGE', 'PIONEER', 'PAUPER', 'DRAFT', 'PLANAR_STANDARD', 'OTHER'
 ];
+const VALID_VISIBILITY = ['PRIVATE', 'INVITE_ONLY', 'PUBLIC'];
 
 const keepAliveAgent = new https.Agent({ keepAlive: true });
 
@@ -73,7 +75,7 @@ async function fetchCardsFromScryfall(scryfallIds) {
 }
 
 exports.create = async (req, res) => {
-  const { name, type, deck_type, description } = req.body;
+  const { name, type, deck_type, description, visibility } = req.body;
   const user_id = req.user.id;
 
   if (!name) {
@@ -93,16 +95,26 @@ exports.create = async (req, res) => {
     }
   }
 
+  // Validate visibility
+  const finalVisibility = visibility ? visibility : 'PRIVATE';
+  if (!VALID_VISIBILITY.includes(finalVisibility)) {
+    return res.status(400).json({ error: 'Visibility must be one of: PRIVATE, INVITE_ONLY, PUBLIC' });
+  }
+
   try {
+    const collectionData = {
+      user_id,
+      name,
+      type,
+      deck_type: type === 'DECK' ? deck_type : null,
+      description: description || null,
+      visibility: finalVisibility,
+      share_slug: (finalVisibility === 'PUBLIC' || finalVisibility === 'INVITE_ONLY') ? randomUUID() : null,
+    };
+
     const [collection] = await db('collections')
-      .insert({
-        user_id,
-        name,
-        type,
-        deck_type: type === 'DECK' ? deck_type : null,
-        description: description || null,
-      })
-      .returning(['id', 'user_id', 'name', 'type', 'deck_type', 'description', 'created_at', 'updated_at']);
+      .insert(collectionData)
+      .returning(['id', 'user_id', 'name', 'type', 'deck_type', 'description', 'visibility', 'share_slug', 'created_at', 'updated_at']);
 
     return res.status(201).json(collection);
   } catch (error) {
@@ -122,6 +134,7 @@ exports.list = async (req, res) => {
         'collections.type',
         'collections.deck_type',
         'collections.description',
+        'collections.visibility',
         'collections.created_at',
         'collections.updated_at',
         db.raw('COALESCE(COUNT(collection_entries.id), 0)::int AS card_count')
@@ -134,6 +147,43 @@ exports.list = async (req, res) => {
     return res.status(200).json(collections);
   } catch (error) {
     console.error('List collections error:', error.message);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.sharedWithMe = async (req, res) => {
+  const user_id = req.user.id;
+
+  try {
+    const collections = await db('collections')
+      .select(
+        'collections.id',
+        'collections.name',
+        'collections.type',
+        'collections.deck_type',
+        'collections.description',
+        'collections.visibility',
+        'collections.share_slug',
+        'collections.user_id',
+        'collections.created_at',
+        'collections.updated_at',
+        db.raw('COALESCE(COUNT(collection_entries.id), 0)::int AS card_count'),
+        'users.email AS owner_email'
+      )
+      .join('collection_shares', 'collections.id', 'collection_shares.collection_id')
+      .join('users', 'collections.user_id', 'users.id')
+      .leftJoin('collection_entries', 'collections.id', 'collection_entries.collection_id')
+      .where('collection_shares.shared_with_user_id', user_id)
+      .where(function() {
+        this.where('collections.visibility', 'INVITE_ONLY')
+            .orWhere('collections.visibility', 'PUBLIC');
+      })
+      .groupBy('collections.id', 'users.email')
+      .orderBy('collections.created_at', 'desc');
+
+    return res.status(200).json(collections);
+  } catch (error) {
+    console.error('List shared-with-me collections error:', error.message);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -188,6 +238,8 @@ exports.getById = async (req, res) => {
       type: collection.type,
       deck_type: collection.deck_type,
       description: collection.description,
+      visibility: collection.visibility,
+      share_slug: collection.share_slug,
       created_at: collection.created_at,
       updated_at: collection.updated_at,
       entries,
@@ -207,7 +259,7 @@ exports.getById = async (req, res) => {
 exports.update = async (req, res) => {
   const user_id = req.user.id;
   const { id } = req.params;
-  const { name, description, deck_type } = req.body;
+  const { name, description, deck_type, visibility } = req.body;
 
   try {
     const collection = await db('collections').where({ id }).first();
@@ -232,12 +284,22 @@ exports.update = async (req, res) => {
       }
       updates.deck_type = deck_type;
     }
+    if (visibility !== undefined) {
+      if (!VALID_VISIBILITY.includes(visibility)) {
+        return res.status(400).json({ error: 'Visibility must be one of: PRIVATE, INVITE_ONLY, PUBLIC' });
+      }
+      updates.visibility = visibility;
+      // If changing to PUBLIC or INVITE_ONLY and no share_slug yet, generate one
+      if ((visibility === 'PUBLIC' || visibility === 'INVITE_ONLY') && !collection.share_slug) {
+        updates.share_slug = randomUUID();
+      }
+    }
     updates.updated_at = db.fn.now();
 
     const [updated] = await db('collections')
       .where({ id })
       .update(updates)
-      .returning(['id', 'user_id', 'name', 'type', 'deck_type', 'description', 'created_at', 'updated_at']);
+      .returning(['id', 'user_id', 'name', 'type', 'deck_type', 'description', 'visibility', 'share_slug', 'created_at', 'updated_at']);
 
     return res.status(200).json(updated);
   } catch (error) {
@@ -691,6 +753,123 @@ exports.validate = async (req, res) => {
   } catch (error) {
     if (handleTimeoutError(error, res)) return;
     console.error('Validate deck error:', error.message);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// ===== Collection Sharing Endpoints =====
+
+exports.createShare = async (req, res) => {
+  const user_id = req.user.id;
+  const { id } = req.params;
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ error: 'email is required' });
+  }
+
+  try {
+    const collection = await db('collections').where({ id }).first();
+
+    if (!collection) {
+      return res.status(404).json({ error: 'Collection not found' });
+    }
+
+    if (collection.user_id !== user_id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const targetUser = await db('users').where({ email }).first();
+    if (!targetUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (targetUser.id === user_id) {
+      return res.status(400).json({ error: 'Cannot share collection with yourself' });
+    }
+
+    const existingShare = await db('collection_shares')
+      .where({ collection_id: id, shared_with_user_id: targetUser.id })
+      .first();
+    if (existingShare) {
+      return res.status(409).json({ error: 'Collection already shared with this user' });
+    }
+
+    const [share] = await db('collection_shares')
+      .insert({ collection_id: id, shared_with_user_id: targetUser.id })
+      .returning(['id', 'collection_id', 'shared_with_user_id', 'created_at']);
+
+    return res.status(201).json({
+      ...share,
+      email: targetUser.email,
+    });
+  } catch (error) {
+    console.error('Create share error:', error.message);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.listShares = async (req, res) => {
+  const user_id = req.user.id;
+  const { id } = req.params;
+
+  try {
+    const collection = await db('collections').where({ id }).first();
+
+    if (!collection) {
+      return res.status(404).json({ error: 'Collection not found' });
+    }
+
+    if (collection.user_id !== user_id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const shares = await db('collection_shares')
+      .select(
+        'collection_shares.id',
+        'collection_shares.collection_id',
+        'collection_shares.shared_with_user_id',
+        'collection_shares.created_at',
+        'users.email'
+      )
+      .join('users', 'collection_shares.shared_with_user_id', 'users.id')
+      .where('collection_shares.collection_id', id);
+
+    return res.status(200).json(shares);
+  } catch (error) {
+    console.error('List shares error:', error.message);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.deleteShare = async (req, res) => {
+  const user_id = req.user.id;
+  const { id, shareId } = req.params;
+
+  try {
+    const collection = await db('collections').where({ id }).first();
+
+    if (!collection) {
+      return res.status(404).json({ error: 'Collection not found' });
+    }
+
+    if (collection.user_id !== user_id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const share = await db('collection_shares')
+      .where({ id: shareId, collection_id: id })
+      .first();
+
+    if (!share) {
+      return res.status(404).json({ error: 'Share not found' });
+    }
+
+    await db('collection_shares').where({ id: shareId }).del();
+
+    return res.status(204).send();
+  } catch (error) {
+    console.error('Delete share error:', error.message);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
