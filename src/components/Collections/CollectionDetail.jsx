@@ -24,6 +24,7 @@ import EditEntryModal from './EditEntryModal';
 import AddToCollectionModal from './AddToCollectionModal';
 import CollectionFilters from './CollectionFilters';
 import ExportCSVModal from './ExportCSVModal';
+import ShareCollectionModal from './ShareCollectionModal';
 import DeckVisualView from './DeckVisualView';
 import authFetch from '../../helpers/authFetch';
 import { DECK_FORMAT_RULES } from '../../helpers/deckRules';
@@ -84,8 +85,10 @@ const desktopColumns = [
 
 const quantityColumn = { key: 'quantity', label: 'Quantity', width: 90, sortable: true };
 
-const CollectionDetail = () => {
-  const { id } = useParams();
+const CollectionDetail = ({ readOnly = false, shareSlug = null }) => {
+  const { id: routeId } = useParams();
+  const id = shareSlug ? null : routeId;
+  const canEdit = !readOnly;
   const navigate = useNavigate();
   const [collection, setCollection] = useState(null);
   const [tableData, setTableData] = useState([]);
@@ -109,6 +112,7 @@ const CollectionDetail = () => {
   const [sortType, setSortType] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
   const [statsExpanded, setStatsExpanded] = useState(true);
   const [paginationProgress, setPaginationProgress] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -249,6 +253,48 @@ const CollectionDetail = () => {
       setCurrentPageNum(1);
 
       try {
+        // Shared mode: single fetch, no pagination
+        if (shareSlug) {
+          const resp = await authFetch(`/shared/collections/${shareSlug}`);
+          if (!isMountedRef.current) return;
+          if (!resp.ok) {
+            if (resp.status === 404) setError('Collection not found');
+            else if (resp.status === 403) setError('You do not have access to this collection');
+            else setError('Failed to load collection');
+            return;
+          }
+          const data = await resp.json();
+          if (!isMountedRef.current) return;
+          setCollection(data);
+          const entries = data.entries || [];
+          if (entries.length > 0) {
+            setCardLoading(true);
+            setPriceLoading(true);
+            const basicData = entries.map((entry) => ({
+              ...entry,
+              name: 'Loading...',
+              type_line: '',
+              rarity: '',
+              colors_raw: [],
+              colors: 'Colorless',
+              set_name: '',
+              current_price: '',
+              current_price_raw: null,
+              purchase_price_raw: entry.purchase_price != null ? Number(entry.purchase_price) : null,
+              purchase_price_display: '',
+              gain_loss_raw: null,
+            }));
+            setTableData(basicData);
+            if (isMountedRef.current) setLoading(false);
+            const cards = await fetchCardsBatch(entries.map((e) => e.scryfall_id));
+            if (!isMountedRef.current) return;
+            setTableData(enrichEntries(entries, cards));
+            setCardLoading(false);
+            setPriceLoading(false);
+          }
+          return;
+        }
+
         // Fetch first page
         const firstResponse = await authFetch(`/collections/${id}?limit=100&page=1`);
         if (!isMountedRef.current) return;
@@ -367,7 +413,7 @@ const CollectionDetail = () => {
     };
 
     fetchCollection();
-  }, [id, refreshKey, toaster]);
+  }, [id, shareSlug, refreshKey, toaster]);
 
   const filteredData = useMemo(() => {
     let data = tableData;
@@ -478,11 +524,17 @@ const CollectionDetail = () => {
     };
   }, [tableData]);
 
-  const allColumns = useMemo(() => (
-    isMobile
+  const hiddenColumnsInReadOnly = ['purchase_price_display', 'gain_loss'];
+
+  const allColumns = useMemo(() => {
+    const base = isMobile
       ? [...defaultColumns, quantityColumn]
-      : [...defaultColumns, ...desktopColumns, quantityColumn]
-  ), []);
+      : [...defaultColumns, ...desktopColumns, quantityColumn];
+    if (!canEdit) {
+      return base.filter((col) => !hiddenColumnsInReadOnly.includes(col.key));
+    }
+    return base;
+  }, [canEdit]);
 
   const handleSortColumn = (dataKey) => {
     const colDef = allColumns.find((c) => c.key === dataKey);
@@ -990,7 +1042,11 @@ const CollectionDetail = () => {
 
   const actionsColumn = { key: 'actions', label: '', width: 120, custom: 'actions' };
 
-  const columns = [checkboxColumn, ...allColumns, actionsColumn];
+  const columns = [
+    ...(canEdit ? [checkboxColumn] : []),
+    ...allColumns,
+    ...(canEdit ? [actionsColumn] : []),
+  ];
 
   const typeBadge = (type) => (
     <span
@@ -1130,15 +1186,17 @@ const CollectionDetail = () => {
                 <span>Total Cards:</span>
                 <strong>{stats.totalCardCount}</strong>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Total Purchase Value:</span>
-                <strong>${stats.totalPurchaseValue.toFixed(2)}</strong>
-              </div>
+              {canEdit && (
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Total Purchase Value:</span>
+                  <strong>${stats.totalPurchaseValue.toFixed(2)}</strong>
+                </div>
+              )}
             </div>
           </div>
 
           {/* Top 10 Most Valuable */}
-          {stats.top10MostValuableCards.length > 0 && (
+          {canEdit && stats.top10MostValuableCards.length > 0 && (
             <div style={{ gridColumn: isMobile ? 'auto' : '1 / -1' }}>
               <h5 style={{ marginTop: 0, marginBottom: 12, fontSize: 14 }}>Top 10 Most Valuable</h5>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 250, overflowY: 'auto' }}>
@@ -1263,6 +1321,11 @@ const CollectionDetail = () => {
                   </span>
                 )}
               </div>
+              {!canEdit && collection.owner_email && (
+                <p style={{ color: COLORS.muted, fontSize: 13, marginBottom: 8 }}>
+                  Shared by <strong>{collection.owner_email}</strong>
+                </p>
+              )}
               {collection.description && (
                 <p style={{ color: COLORS.muted, fontSize: 13, marginBottom: 8 }}>
                   {collection.description}
@@ -1295,7 +1358,7 @@ const CollectionDetail = () => {
                     />
                   </div>
                 )}
-                {selectedIds.size > 0 && (
+                {canEdit && selectedIds.size > 0 && (
                   <>
                     <Badge
                       content={selectedIds.size}
@@ -1322,31 +1385,42 @@ const CollectionDetail = () => {
                     </Button>
                   </>
                 )}
-                <Button
-                  size="xs"
-                  appearance="primary"
-                  onClick={() => { setSearchTerm(''); setSearchModalOpen(true); }}
-                >
-                  Add Card
-                </Button>
-                {tableData.length > 0 && (
-                  <Button
-                    size="xs"
-                    appearance="ghost"
-                    onClick={() => setExportModalOpen(true)}
-                  >
-                    Export CSV
-                  </Button>
-                )}
-                {collection.type === 'DECK' && tableData.length > 0 && (
-                  <Button
-                    size="xs"
-                    appearance="primary"
-                    onClick={validateDeck}
-                    loading={validationLoading}
-                  >
-                    Validate Deck
-                  </Button>
+                {canEdit && (
+                  <>
+                    <Button
+                      size="xs"
+                      appearance="primary"
+                      onClick={() => { setSearchTerm(''); setSearchModalOpen(true); }}
+                    >
+                      Add Card
+                    </Button>
+                    <Button
+                      size="xs"
+                      appearance="ghost"
+                      onClick={() => setShareModalOpen(true)}
+                    >
+                      Share
+                    </Button>
+                    {tableData.length > 0 && (
+                      <Button
+                        size="xs"
+                        appearance="ghost"
+                        onClick={() => setExportModalOpen(true)}
+                      >
+                        Export CSV
+                      </Button>
+                    )}
+                    {collection.type === 'DECK' && tableData.length > 0 && (
+                      <Button
+                        size="xs"
+                        appearance="primary"
+                        onClick={validateDeck}
+                        loading={validationLoading}
+                      >
+                        Validate Deck
+                      </Button>
+                    )}
+                  </>
                 )}
                 {tableData.length > 0 && (
                   <ButtonGroup size="xs">
@@ -1368,9 +1442,9 @@ const CollectionDetail = () => {
               </div>
               {tableData.length > 0 && !priceLoading && (
                 <div style={{ display: 'flex', gap: SPACING.statsGap, flexWrap: 'wrap', marginTop: 8, fontSize: 13 }}>
-                  <span>Purchase Value: <strong>${priceSummary.totalPurchase.toFixed(2)}</strong></span>
+                  {canEdit && <span>Purchase Value: <strong>${priceSummary.totalPurchase.toFixed(2)}</strong></span>}
                   <span>Current Value: <strong>${priceSummary.totalCurrent.toFixed(2)}</strong></span>
-                  {priceSummary.trackable.length > 0 && (
+                  {canEdit && priceSummary.trackable.length > 0 && (
                     <span>Gain/Loss: <strong style={{ color: priceSummary.glColor }}>{priceSummary.glPrefix}${priceSummary.totalGainLoss.toFixed(2)}</strong></span>
                   )}
                 </div>
@@ -1424,13 +1498,15 @@ const CollectionDetail = () => {
             {renderStatsSection()}
 
             <div
-              onDragOver={handleDragOver}
-              onDragEnter={handleDragEnter}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
+              {...(canEdit ? {
+                onDragOver: handleDragOver,
+                onDragEnter: handleDragEnter,
+                onDragLeave: handleDragLeave,
+                onDrop: handleDrop,
+              } : {})}
               style={{ position: 'relative' }}
             >
-              {dragOverActive && (
+              {canEdit && dragOverActive && (
                 <div style={{
                   position: 'absolute',
                   top: 0,
@@ -1452,7 +1528,7 @@ const CollectionDetail = () => {
                 </div>
               )}
 
-              {resolvingDrop && (
+              {canEdit && resolvingDrop && (
                 <div style={{
                   position: 'absolute',
                   top: '50%',
@@ -1474,8 +1550,12 @@ const CollectionDetail = () => {
                   transition: 'all 0.2s ease',
                 }}>
                   <p style={{ fontSize: 18, marginBottom: 8 }}>No cards in this collection</p>
-                  <p>Add cards from card pages to start building your collection.</p>
-                  <p style={{ fontSize: 12, marginTop: 16, color: COLORS.hintText }}>💡 Drag card images from EDHREC, TCGPlayer, or CardKingdom to add cards</p>
+                  {canEdit && (
+                    <>
+                      <p>Add cards from card pages to start building your collection.</p>
+                      <p style={{ fontSize: 12, marginTop: 16, color: COLORS.hintText }}>💡 Drag card images from EDHREC, TCGPlayer, or CardKingdom to add cards</p>
+                    </>
+                  )}
                 </div>
               ) : viewMode === 'visual' ? (
                 <DeckVisualView
@@ -1536,7 +1616,9 @@ const CollectionDetail = () => {
                )}
                </div>
 
-               <EditEntryModal
+               {canEdit && (
+                <>
+                <EditEntryModal
               open={editModalOpen}
               onClose={handleEditClose}
               entry={editEntry}
@@ -1585,6 +1667,12 @@ const CollectionDetail = () => {
               onClose={() => setExportModalOpen(false)}
               collectionName={collection?.name}
               entries={tableData}
+            />
+
+            <ShareCollectionModal
+              open={shareModalOpen}
+              onClose={() => setShareModalOpen(false)}
+              collection={collection}
             />
 
             <Modal
@@ -1759,6 +1847,8 @@ const CollectionDetail = () => {
                 ) : null}
               </Modal.Body>
             </Modal>
+                </>
+              )}
           </div>
         </Content>
       </Container>
