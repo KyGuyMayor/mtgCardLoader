@@ -113,6 +113,19 @@ const PRINTINGS_DIM_OPACITY = 0.6;
 const PRINTINGS_HIGHLIGHT_COLOR = '#00d9ff';
 const PRINTINGS_HOVER_TRANSITION = 'opacity 0.2s';
 
+const DESKTOP_IMAGE_WIDTH = 340;
+const DESKTOP_IMAGE_HEIGHT = 475;
+
+const MOBILE_IMAGE_MAX_WIDTH = '100%';
+const MOBILE_IMAGE_MARGIN_BOTTOM = 20;
+
+const MOBILE_BUTTON_MARGIN_BOTTOM = 20;
+const MOBILE_BUTTON_WIDTH = '100%';
+
+const MOBILE_RULINGS_META_FONT_SIZE = 13;
+const MOBILE_RULINGS_COMMENT_LINE_HEIGHT = 1.6;
+const MOBILE_RULINGS_ITEM_MARGIN_BOTTOM = 8;
+
 const CardView = () => {
    const {id} = useParams();
    const navigate = useNavigate();
@@ -196,6 +209,30 @@ const CardView = () => {
       <Container>
         <NavigationBar />
           <Content style={{ marginTop: "15px" }}>
+            {isMobile && (
+              <div style={{ marginBottom: MOBILE_IMAGE_MARGIN_BOTTOM, textAlign: 'center' }}>
+                {getImageUri(card, activeFace) && (
+                  <img
+                    src={getImageUri(card, activeFace)}
+                    alt={card?.name || 'Card image'}
+                    style={{
+                      maxWidth: MOBILE_IMAGE_MAX_WIDTH,
+                      height: 'auto',
+                      decoding: 'async',
+                    }}
+                  />
+                )}
+                {isDoubleFaced(card) && (
+                  <Button 
+                    appearance="primary" 
+                    onClick={toggleFace}
+                    style={{ marginTop: MOBILE_IMAGE_MARGIN_BOTTOM, width: MOBILE_BUTTON_WIDTH }}
+                  >
+                    {activeFace === 0 ? 'Show Back Face' : 'Show Front Face'}
+                  </Button>
+                )}
+              </div>
+            )}
             <FlexboxGrid justify="center" align="top">
               <FlexboxGrid.Item colspan={isMobile ? 20 : 14} style={{ paddingRight: isMobile ? "0px" : "10px" }}>
                 <Panel bordered>
@@ -239,8 +276,8 @@ const CardView = () => {
                     )}
                     {!rulingsLoading && !rulingsError && rulings.map((ruling, i) => (
                       <div key={i}>
-                        <p style={{ whiteSpace: 'pre-wrap', marginBottom: RULINGS_ITEM_MARGIN_BOTTOM }}>{ruling.comment}</p>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: RULINGS_META_FONT_SIZE, color: '#888', marginBottom: RULINGS_ITEM_MARGIN_BOTTOM }}>
+                        <p style={{ whiteSpace: 'pre-wrap', marginBottom: isMobile ? MOBILE_RULINGS_ITEM_MARGIN_BOTTOM : RULINGS_ITEM_MARGIN_BOTTOM, lineHeight: isMobile ? MOBILE_RULINGS_COMMENT_LINE_HEIGHT : 1.5 }}>{ruling.comment}</p>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: isMobile ? MOBILE_RULINGS_META_FONT_SIZE : RULINGS_META_FONT_SIZE, color: '#888', marginBottom: isMobile ? MOBILE_RULINGS_ITEM_MARGIN_BOTTOM : RULINGS_ITEM_MARGIN_BOTTOM }}>
                           <span>{new Date(ruling.published_at + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
                           <span>{ruling.source === 'wotc' ? 'WotC' : 'Scryfall'}</span>
                         </div>
@@ -342,8 +379,8 @@ const CardView = () => {
                 <img
                   src={getImageUri(card, activeFace)}
                   alt={card?.name || 'Card image'}
-                  width="340"
-                  height="475"
+                  width={DESKTOP_IMAGE_WIDTH}
+                  height={DESKTOP_IMAGE_HEIGHT}
                   decoding="async"
                 />
                 {isDoubleFaced(card) && (
