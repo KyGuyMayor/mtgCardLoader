@@ -261,3 +261,104 @@ exports.collection = async (req, res) => {
     return res.status(500).json({ error: 'Internal Server Error', message: e.message });
   }
 };
+
+/**
+ * Get all printings of a card (proxies Scryfall printings endpoint).
+ * Fetches the card first to get prints_search_uri, then paginates through all printings.
+ */
+exports.printings = async (req, res) => {
+  const { id } = req.params;
+
+  const cacheKey = `printings:${id}`;
+  const cached = ttlCache.get(cacheKey);
+  if (cached) {
+    res.set('Cache-Control', CACHE_MAX_AGE_HEADER);
+    return res.json(cached);
+  }
+
+  try {
+    // Fetch card to get prints_search_uri
+    const card = await rateLimitedRequest(() => scry.Cards.byId(id));
+
+    if (!card) {
+      return res.status(404).json({ error: 'Not Found', message: 'Card not found' });
+    }
+
+    let allPrintings = [];
+    let nextPage = card.prints_search_uri;
+
+    // Paginate through all printings
+    while (nextPage) {
+      const data = await rateLimitedRequest(() => {
+        return new Promise((resolve, reject) => {
+          const options = {
+            hostname: 'api.scryfall.com',
+            path: new URL(nextPage).pathname + new URL(nextPage).search,
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+              'User-Agent': 'MTGCardLoader/1.0',
+            },
+            agent: keepAliveAgent,
+          };
+
+          const request = https.request(options, (response) => {
+            let body = '';
+            response.on('data', (chunk) => { body += chunk; });
+            response.on('end', () => {
+              try {
+                resolve(JSON.parse(body));
+              } catch (err) {
+                reject(new Error('Failed to parse Scryfall response'));
+              }
+            });
+          });
+
+          request.on('error', reject);
+          request.end();
+        });
+      });
+
+      // Simplify each printing to essential fields
+      const simplified = (data.data || []).map(card => ({
+        id: card.id,
+        name: card.name,
+        set: card.set,
+        set_name: card.set_name,
+        collector_number: card.collector_number,
+        image_uris: card.image_uris || (card.card_faces && card.card_faces[0] && card.card_faces[0].image_uris),
+        prices: card.prices,
+        finishes: card.finishes,
+        rarity: card.rarity,
+        released_at: card.released_at,
+      }));
+
+      allPrintings = allPrintings.concat(simplified);
+
+      // Check if there's another page
+      if (data.has_more && data.next_page) {
+        nextPage = data.next_page;
+      } else {
+        nextPage = null;
+      }
+    }
+
+    // Sort by released_at descending (newest first)
+    allPrintings.sort((a, b) => {
+      const dateA = new Date(a.released_at || '1970-01-01').getTime();
+      const dateB = new Date(b.released_at || '1970-01-01').getTime();
+      return dateB - dateA;
+    });
+
+    // Cache and return
+    ttlCache.set(cacheKey, allPrintings, CACHE_TTL_MS);
+    res.set('Cache-Control', CACHE_MAX_AGE_HEADER);
+    return res.json(allPrintings);
+  } catch (e) {
+    if (handleTimeoutError(e, res)) return;
+    if (e.statusCode === 404) {
+      return res.status(404).json({ error: 'Not Found', message: 'Card not found' });
+    }
+    return res.status(500).json({ error: 'Internal Server Error', message: e.message });
+  }
+};

@@ -1,17 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { isMobile } from 'react-device-detect';
 import {
-  CustomProvider,
-  Container,
-  Content,
-  FlexboxGrid,
-  Panel,
-  Button,
-  Badge,
-  Loader,
-  Divider
-} from 'rsuite';
+   CustomProvider,
+   Container,
+   Content,
+   FlexboxGrid,
+   Panel,
+   Button,
+   Badge,
+   Loader,
+   Divider,
+   Tooltip,
+   Whisper
+ } from 'rsuite';
 
 import CardStat from './CardStat';
 import Link from '../Shared/Link';
@@ -101,15 +103,29 @@ const RULINGS_META_FONT_SIZE = 12;
 const RULINGS_ITEM_MARGIN_BOTTOM = 4;
 const RULINGS_DIVIDER_MARGIN = '8px 0';
 
+const PRINTINGS_THUMBNAIL_HEIGHT = 60;
+const PRINTINGS_THUMBNAIL_BORDER_RADIUS = 2;
+const PRINTINGS_LIST_GAP = 8;
+const PRINTINGS_LIST_OVERFLOW_PADDING = 8;
+const PRINTINGS_BORDER_WIDTH = 2;
+const PRINTINGS_HIGHLIGHT_OPACITY = 1;
+const PRINTINGS_DIM_OPACITY = 0.6;
+const PRINTINGS_HIGHLIGHT_COLOR = '#00d9ff';
+const PRINTINGS_HOVER_TRANSITION = 'opacity 0.2s';
+
 const CardView = () => {
-  const {id} = useParams();
-  const [card, setCard] =  useState();
-  const [activeFace, setActiveFace] = useState(0);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [rulings, setRulings] = useState([]);
-  const [rulingsLoading, setRulingsLoading] = useState(false);
-  const [rulingsError, setRulingsError] = useState(false);
-  const { isAuthenticated } = useAuth();
+   const {id} = useParams();
+   const navigate = useNavigate();
+   const [card, setCard] =  useState();
+   const [activeFace, setActiveFace] = useState(0);
+   const [showAddModal, setShowAddModal] = useState(false);
+   const [rulings, setRulings] = useState([]);
+   const [rulingsLoading, setRulingsLoading] = useState(false);
+   const [rulingsError, setRulingsError] = useState(false);
+   const [printings, setPrintings] = useState([]);
+   const [printingsLoading, setPrintingsLoading] = useState(false);
+   const [printingsError, setPrintingsError] = useState(false);
+   const { isAuthenticated } = useAuth();
 
   const toggleFace = () => {
     setActiveFace(prev => prev === 0 ? 1 : 0);
@@ -143,6 +159,25 @@ const CardView = () => {
       }
     };
     fetchRulings();
+  }, [card?.id]);
+
+  useEffect(() => {
+    if (!card?.id) return;
+    const fetchPrintings = async () => {
+      setPrintingsLoading(true);
+      setPrintingsError(false);
+      try {
+        const res = await fetch(`/cards/${card.id}/printings`);
+        if (!res.ok) throw new Error('Failed to fetch printings');
+        const data = await res.json();
+        setPrintings(data);
+      } catch {
+        setPrintingsError(true);
+      } finally {
+        setPrintingsLoading(false);
+      }
+    };
+    fetchPrintings();
   }, [card?.id]);
 
   useEffect(() => {
@@ -213,6 +248,81 @@ const CardView = () => {
                       </div>
                     ))}
                   </Panel>
+
+                  {printings.length > 1 && (
+                    <Panel
+                      collapsible
+                      defaultExpanded
+                      bordered
+                      header={
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: RULINGS_HEADER_GAP }}>
+                          Other Printings
+                          {printings.length > 1 && <Badge content={printings.length - 1} />}
+                        </span>
+                      }
+                      style={{ marginTop: RULINGS_PANEL_MARGIN_TOP }}
+                    >
+                      {printingsLoading && <Loader content="Loading printings..." />}
+                      {printingsError && <p style={{ color: '#aaa' }}>Unable to load printings.</p>}
+                      {!printingsLoading && !printingsError && (
+                        <div
+                          style={{
+                            display: 'flex',
+                            gap: `${PRINTINGS_LIST_GAP}px`,
+                            overflowX: 'auto',
+                            paddingBottom: `${PRINTINGS_LIST_OVERFLOW_PADDING}px`,
+                          }}
+                        >
+                          {printings.map((printing) => (
+                            <Whisper
+                              key={printing.id}
+                              placement="top"
+                              trigger="hover"
+                              speaker={
+                                <Tooltip>
+                                  {printing.set_name} #{printing.collector_number}
+                                </Tooltip>
+                              }
+                            >
+                              <div
+                                onClick={() => navigate(`/cardsearch/${printing.id}`)}
+                                style={{
+                                  cursor: 'pointer',
+                                  flexShrink: 0,
+                                  opacity: printing.id === card?.id ? PRINTINGS_HIGHLIGHT_OPACITY : PRINTINGS_DIM_OPACITY,
+                                  border: printing.id === card?.id ? `${PRINTINGS_BORDER_WIDTH}px solid ${PRINTINGS_HIGHLIGHT_COLOR}` : `${PRINTINGS_BORDER_WIDTH}px solid transparent`,
+                                  borderRadius: `${PRINTINGS_THUMBNAIL_BORDER_RADIUS}px`,
+                                  transition: PRINTINGS_HOVER_TRANSITION,
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (printing.id !== card?.id) {
+                                    e.currentTarget.style.opacity = '0.9';
+                                  }
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (printing.id !== card?.id) {
+                                    e.currentTarget.style.opacity = String(PRINTINGS_DIM_OPACITY);
+                                  }
+                                }}
+                              >
+                                {printing.image_uris && (
+                                  <img
+                                    src={printing.image_uris.small}
+                                    alt={printing.name}
+                                    style={{
+                                      height: `${PRINTINGS_THUMBNAIL_HEIGHT}px`,
+                                      borderRadius: `${PRINTINGS_THUMBNAIL_BORDER_RADIUS}px`,
+                                    }}
+                                  />
+                                )}
+                              </div>
+                            </Whisper>
+                          ))}
+                        </div>
+                      )}
+                    </Panel>
+                  )}
+
                   {isAuthenticated && (
                     <Button
                       appearance="primary"

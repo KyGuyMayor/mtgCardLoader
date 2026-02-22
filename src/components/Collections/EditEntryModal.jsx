@@ -1,41 +1,72 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Modal,
-  Button,
-  Form,
-  SelectPicker,
-  InputNumber,
-  Input,
-  Message,
-  useToaster,
-  ButtonGroup,
-} from 'rsuite';
-import authFetch from '../../helpers/authFetch';
-import { CONDITION_OPTIONS, FINISH_OPTIONS } from './CardEntryFormOptions';
+   Modal,
+   Button,
+   Form,
+   SelectPicker,
+   InputNumber,
+   Input,
+   Message,
+   useToaster,
+   ButtonGroup,
+   Loader,
+ } from 'rsuite';
+ import authFetch from '../../helpers/authFetch';
+ import { CONDITION_OPTIONS, FINISH_OPTIONS } from './CardEntryFormOptions';
 
-const EditEntryModal = ({ open, onClose, entry, collectionId, onUpdated }) => {
-  const [formData, setFormData] = useState({
-    quantity: 1,
-    condition: 'NM',
-    finish: 'nonfoil',
-    purchase_price: '',
-    notes: '',
-  });
-  const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const toaster = useToaster();
+ const PRINTING_PREVIEW_HEIGHT = 70;
+ const PRINTING_PREVIEW_BORDER_RADIUS = 4;
+ const PRINTING_PREVIEW_MARGIN_TOP = 8;
+
+ const EditEntryModal = ({ open, onClose, entry, collectionId, onUpdated }) => {
+   const [formData, setFormData] = useState({
+     scryfall_id: null,
+     quantity: 1,
+     condition: 'NM',
+     finish: 'nonfoil',
+     purchase_price: '',
+     notes: '',
+   });
+   const [error, setError] = useState('');
+   const [submitting, setSubmitting] = useState(false);
+   const [printings, setPrintings] = useState([]);
+   const [loadingPrintings, setLoadingPrintings] = useState(false);
+   const [originalScryfallId, setOriginalScryfallId] = useState(null);
+   const toaster = useToaster();
 
   useEffect(() => {
     if (open && entry) {
       const finish = entry.finish || 'nonfoil';
       setFormData({
+        scryfall_id: entry.scryfall_id,
         quantity: entry.quantity || 1,
         condition: entry.condition || 'NM',
         finish: finish,
         purchase_price: entry.purchase_price != null ? entry.purchase_price : '',
         notes: entry.notes || '',
       });
+      setOriginalScryfallId(entry.scryfall_id);
       setError('');
+
+      // Fetch printings for this card
+      const fetchPrintings = async () => {
+        setLoadingPrintings(true);
+        try {
+          const response = await authFetch(`/cards/${entry.scryfall_id}/printings`);
+          if (response.ok) {
+            const data = await response.json();
+            setPrintings(data);
+          }
+        } catch (err) {
+          // silent fail - graceful degradation
+        } finally {
+          setLoadingPrintings(false);
+        }
+      };
+
+      if (entry.scryfall_id) {
+        fetchPrintings();
+      }
     }
   }, [open, entry]);
 
@@ -64,6 +95,11 @@ const EditEntryModal = ({ open, onClose, entry, collectionId, onUpdated }) => {
         condition: formData.condition,
         finish: formData.finish,
       };
+
+      // Only send scryfall_id if it changed
+      if (formData.scryfall_id !== originalScryfallId) {
+        body.scryfall_id = formData.scryfall_id;
+      }
 
       if (formData.purchase_price !== '') {
         body.purchase_price = parseFloat(formData.purchase_price);
@@ -166,6 +202,46 @@ const EditEntryModal = ({ open, onClose, entry, collectionId, onUpdated }) => {
               placeholder="Select finish"
             />
           </Form.Group>
+
+          {!loadingPrintings && printings.length > 0 && (
+            <Form.Group>
+              <Form.ControlLabel>Printing</Form.ControlLabel>
+              {loadingPrintings ? (
+                <Loader content="Loading printings..." />
+              ) : (
+                <>
+                  <SelectPicker
+                    data={printings.map((p) => ({
+                      label: `${p.set_name} (${p.collector_number})`,
+                      value: p.id,
+                    }))}
+                    value={formData.scryfall_id}
+                    onChange={(value) => setField('scryfall_id', value)}
+                    searchable={false}
+                    block
+                    placeholder="Select printing"
+                  />
+                  {formData.scryfall_id && (
+                    <div style={{ marginTop: PRINTING_PREVIEW_MARGIN_TOP }}>
+                      {(() => {
+                        const selected = printings.find((p) => p.id === formData.scryfall_id);
+                        if (selected && selected.image_uris) {
+                          return (
+                            <img
+                              src={selected.image_uris.normal}
+                              alt={selected.name}
+                              style={{ height: PRINTING_PREVIEW_HEIGHT, borderRadius: PRINTING_PREVIEW_BORDER_RADIUS }}
+                            />
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
+                  )}
+                </>
+              )}
+            </Form.Group>
+          )}
 
           <Form.Group>
             <Form.ControlLabel>Purchase Price (optional)</Form.ControlLabel>

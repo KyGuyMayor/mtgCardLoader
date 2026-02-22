@@ -175,27 +175,32 @@ const CollectionDetail = () => {
       }
     }
 
+    // Format set display with collector number
+    const setDisplay = card?.collector_number
+      ? `${card.set_name || ''} (#${card.collector_number})`
+      : card?.set_name || '';
+
     return {
-      ...entry,
-      name: card?.name || 'Unknown Card',
-      type_line: card?.type_line || '',
-      rarity: card?.rarity || '',
-      colors_raw: rawColors,
-      colors: rawColors.join(', ') || 'Colorless',
-      set_name: card?.set_name || '',
-      cmc: card?.cmc ?? 0,
-      image_small: imageSmall,
-      image_normal: imageNormal,
-      image_uris: card?.image_uris || null,
-      card_faces: card?.card_faces || null,
-      purchase_price_display: purchaseRaw != null
-        ? `$${purchaseRaw.toFixed(2)}`
-        : '',
-      current_price: currentRaw != null ? `$${currentRaw.toFixed(2)}` : '',
-      current_price_raw: currentRaw,
-      purchase_price_raw: purchaseRaw,
-      gain_loss_raw: gainLossRaw,
-    };
+       ...entry,
+       name: card?.name || 'Unknown Card',
+       type_line: card?.type_line || '',
+       rarity: card?.rarity || '',
+       colors_raw: rawColors,
+       colors: rawColors.join(', ') || 'Colorless',
+       set_name: setDisplay,
+       cmc: card?.cmc ?? 0,
+       image_small: imageSmall,
+       image_normal: imageNormal,
+       image_uris: card?.image_uris || null,
+       card_faces: card?.card_faces || null,
+       purchase_price_display: purchaseRaw != null
+         ? `$${purchaseRaw.toFixed(2)}`
+         : '',
+       current_price: currentRaw != null ? `$${currentRaw.toFixed(2)}` : '',
+       current_price_raw: currentRaw,
+       purchase_price_raw: purchaseRaw,
+       gain_loss_raw: gainLossRaw,
+     };
   });
 
   const fetchCardsBatch = async (scryfallIds) => {

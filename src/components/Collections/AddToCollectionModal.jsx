@@ -16,32 +16,45 @@ import { DECK_FORMAT_RULES, isBasicLand } from '../../helpers/deckRules';
 import { CONDITION_OPTIONS, FINISH_OPTIONS } from './CardEntryFormOptions';
 
 const CONSTRUCTED_DECK_TYPES = [
-  'COMMANDER', 'STANDARD', 'MODERN', 'LEGACY', 'VINTAGE', 'PIONEER', 'PAUPER', 'PLANAR_STANDARD',
-];
+   'COMMANDER', 'STANDARD', 'MODERN', 'LEGACY', 'VINTAGE', 'PIONEER', 'PAUPER', 'PLANAR_STANDARD',
+ ];
 
-const INITIAL_FORM = {
-  collection_id: null,
-  quantity: 1,
-  condition: 'NM',
-  finish: 'nonfoil',
-  purchase_price: '',
-  notes: '',
-  is_commander: false,
-  is_sideboard: false,
-};
+ const PRINTING_PREVIEW_HEIGHT = 70;
+ const PRINTING_PREVIEW_BORDER_RADIUS = 4;
+ const PRINTING_PREVIEW_MARGIN_TOP = 8;
 
-const AddToCollectionModal = ({ open, onClose, onSuccess, scryfallId, cardName, card, preSelectedCollectionId }) => {
-  const [formData, setFormData] = useState({ ...INITIAL_FORM });
-  const [collections, setCollections] = useState([]);
-  const [loadingCollections, setLoadingCollections] = useState(false);
-  const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [warnings, setWarnings] = useState([]);
-  const toaster = useToaster();
+ const INITIAL_FORM = {
+   collection_id: null,
+   scryfall_id: null,
+   quantity: 1,
+   condition: 'NM',
+   finish: 'nonfoil',
+   purchase_price: '',
+   notes: '',
+   is_commander: false,
+   is_sideboard: false,
+ };
+
+ const AddToCollectionModal = ({ open, onClose, onSuccess, scryfallId, cardName, card, preSelectedCollectionId }) => {
+   const [formData, setFormData] = useState({ ...INITIAL_FORM });
+   const [collections, setCollections] = useState([]);
+   const [loadingCollections, setLoadingCollections] = useState(false);
+   const [error, setError] = useState('');
+   const [submitting, setSubmitting] = useState(false);
+   const [warnings, setWarnings] = useState([]);
+   const [printings, setPrintings] = useState([]);
+   const [loadingPrintings, setLoadingPrintings] = useState(false);
+   const toaster = useToaster();
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
+
+    // Initialize form with current scryfallId
+    if (scryfallId && !formData.scryfall_id) {
+      setFormData(prev => ({ ...prev, scryfall_id: scryfallId }));
+    }
+
     const fetchCollections = async () => {
       setLoadingCollections(true);
       try {
@@ -59,9 +72,28 @@ const AddToCollectionModal = ({ open, onClose, onSuccess, scryfallId, cardName, 
         if (!cancelled) setLoadingCollections(false);
       }
     };
+
+    const fetchPrintings = async () => {
+      setLoadingPrintings(true);
+      try {
+        const response = await authFetch(`/cards/${scryfallId}/printings`);
+        if (response.ok && !cancelled) {
+          const data = await response.json();
+          setPrintings(data);
+        }
+      } catch (err) {
+        // silent fail - graceful degradation
+      } finally {
+        if (!cancelled) setLoadingPrintings(false);
+      }
+    };
+
     fetchCollections();
+    if (scryfallId) {
+      fetchPrintings();
+    }
     return () => { cancelled = true; };
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, scryfallId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectedCollection = collections.find((c) => c.id === formData.collection_id);
   const isCommander = selectedCollection?.type === 'DECK' && selectedCollection?.deck_type === 'COMMANDER';
@@ -84,7 +116,7 @@ const AddToCollectionModal = ({ open, onClose, onSuccess, scryfallId, cardName, 
     setSubmitting(true);
     try {
       const body = {
-        scryfall_id: scryfallId,
+        scryfall_id: formData.scryfall_id || scryfallId,
         quantity: formData.quantity,
         condition: formData.condition,
         finish: formData.finish,
@@ -308,6 +340,46 @@ const AddToCollectionModal = ({ open, onClose, onSuccess, scryfallId, cardName, 
                 disabled={!!preSelectedCollectionId}
               />
             </Form.Group>
+
+            {!loadingPrintings && printings.length > 0 && (
+              <Form.Group>
+                <Form.ControlLabel>Printing</Form.ControlLabel>
+                {loadingPrintings ? (
+                  <Loader content="Loading printings..." />
+                ) : (
+                  <>
+                    <SelectPicker
+                      data={printings.map((p) => ({
+                        label: `${p.set_name} (${p.collector_number})`,
+                        value: p.id,
+                      }))}
+                      value={formData.scryfall_id}
+                      onChange={(value) => setField('scryfall_id', value)}
+                      searchable={false}
+                      block
+                      placeholder="Select printing"
+                    />
+                    {formData.scryfall_id && (
+                      <div style={{ marginTop: PRINTING_PREVIEW_MARGIN_TOP }}>
+                        {(() => {
+                          const selected = printings.find((p) => p.id === formData.scryfall_id);
+                          if (selected && selected.image_uris) {
+                            return (
+                              <img
+                                src={selected.image_uris.normal}
+                                alt={selected.name}
+                                style={{ height: PRINTING_PREVIEW_HEIGHT, borderRadius: PRINTING_PREVIEW_BORDER_RADIUS }}
+                              />
+                            );
+                          }
+                          return null;
+                        })()}
+                      </div>
+                    )}
+                  </>
+                )}
+              </Form.Group>
+            )}
 
             {warnings.length > 0 && (
               <Message type="warning" showIcon style={{ marginBottom: 16 }}>

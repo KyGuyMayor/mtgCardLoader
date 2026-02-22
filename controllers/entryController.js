@@ -71,7 +71,7 @@ exports.create = async (req, res) => {
 exports.update = async (req, res) => {
   const user_id = req.user.id;
   const { id, entryId } = req.params;
-  const { quantity, condition, purchase_price, notes, is_commander, is_sideboard, finish } = req.body;
+  const { scryfall_id, quantity, condition, purchase_price, notes, is_commander, is_sideboard, finish } = req.body;
 
   if (condition !== undefined && !VALID_CONDITIONS.includes(condition)) {
     return res.status(400).json({ error: `condition must be one of: ${VALID_CONDITIONS.join(', ')}` });
@@ -79,6 +79,11 @@ exports.update = async (req, res) => {
 
   if (finish !== undefined && !VALID_FINISHES.includes(finish)) {
     return res.status(400).json({ error: `finish must be one of: ${VALID_FINISHES.join(', ')}` });
+  }
+
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (scryfall_id !== undefined && !UUID_RE.test(scryfall_id)) {
+    return res.status(400).json({ error: 'scryfall_id must be a valid UUID' });
   }
 
   try {
@@ -93,6 +98,7 @@ exports.update = async (req, res) => {
     }
 
     const updates = {};
+    if (scryfall_id !== undefined) updates.scryfall_id = scryfall_id;
     if (quantity !== undefined) updates.quantity = quantity;
     if (condition !== undefined) updates.condition = condition;
     if (purchase_price !== undefined) updates.purchase_price = purchase_price;
