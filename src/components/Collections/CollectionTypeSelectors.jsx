@@ -16,6 +16,7 @@ export const DECK_TYPE_OPTIONS = [
   { label: 'Pauper', value: 'PAUPER' },
   { label: 'Draft', value: 'DRAFT' },
   { label: 'Planar Standard', value: 'PLANAR_STANDARD' },
+  { label: 'Oathbreaker', value: 'OATHBREAKER' },
   { label: 'Other', value: 'OTHER' },
 ];
 

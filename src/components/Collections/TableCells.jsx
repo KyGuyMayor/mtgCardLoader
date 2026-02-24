@@ -33,12 +33,25 @@ export const FinishCell = ({ rowData, ...props }) => {
   );
 };
 
-export const NameCell = ({ rowData, errorMap, warningMap, ...props }) => {
+export const NameCell = ({ rowData, errorMap, warningMap, deckType, ...props }) => {
   const scryfallId = rowData?.scryfall_id;
   const error = scryfallId ? errorMap[scryfallId] : null;
   const warning = scryfallId ? warningMap[scryfallId] : null;
   const violation = error || warning;
   const isCommander = rowData?.is_commander;
+  const isSignatureSpell = rowData?.is_signature_spell;
+  const isOathbreaker = deckType === 'OATHBREAKER';
+
+  // Badge styles
+  const badgeBaseStyle = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: 10,
+    fontWeight: 'bold',
+    borderRadius: '50%',
+    flexShrink: 0,
+  };
 
   return (
     <Cell {...props}>
@@ -75,20 +88,42 @@ export const NameCell = ({ rowData, errorMap, warningMap, ...props }) => {
             </span>
           </Whisper>
         )}
-        {isCommander && (
+        {isOathbreaker && isCommander && (
           <span
             style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              ...badgeBaseStyle,
+              width: 20,
+              height: 20,
+              backgroundColor: '#9b59b6',
+              color: '#fff',
+            }}
+            title="Oathbreaker"
+          >
+            OB
+          </span>
+        )}
+        {isOathbreaker && isSignatureSpell && (
+          <span
+            style={{
+              ...badgeBaseStyle,
+              width: 20,
+              height: 20,
+              backgroundColor: '#3498db',
+              color: '#fff',
+            }}
+            title="Signature Spell"
+          >
+            SS
+          </span>
+        )}
+        {!isOathbreaker && isCommander && (
+          <span
+            style={{
+              ...badgeBaseStyle,
               width: 20,
               height: 20,
               backgroundColor: '#f1c40f',
               color: '#000',
-              fontSize: 10,
-              fontWeight: 'bold',
-              borderRadius: '50%',
-              flexShrink: 0,
             }}
             title="Commander"
           >

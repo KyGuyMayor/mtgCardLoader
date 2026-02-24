@@ -61,10 +61,16 @@ const CreateCollectionModal = ({ open, onClose, onCreated }) => {
       hints.push('Basic lands exempt from copy limit');
     }
 
-    // Commander-specific hints
+    // Commander-specific and Oathbreaker hints
     if (rules.requiresCommander) {
-      hints.push('Requires a Legendary Creature as commander');
-      hints.push('Cards must match commander color identity');
+      if (formData.deck_type === 'OATHBREAKER') {
+        hints.push(`Requires a ${rules.commanderLabel} (Planeswalker)`);
+        hints.push('Requires a Signature Spell (Instant or Sorcery)');
+        hints.push(`Cards must match ${rules.commanderLabel.toLowerCase()} color identity`);
+      } else {
+        hints.push('Requires a Legendary Creature as commander');
+        hints.push('Cards must match commander color identity');
+      }
     }
 
     // Planar Standard-specific hints

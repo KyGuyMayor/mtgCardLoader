@@ -1,32 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import {
-   Modal,
-   Button,
-   Form,
-   SelectPicker,
-   InputNumber,
-   Input,
-   Message,
-   useToaster,
-   ButtonGroup,
-   Loader,
- } from 'rsuite';
- import authFetch from '../../helpers/authFetch';
- import { CONDITION_OPTIONS, FINISH_OPTIONS } from './CardEntryFormOptions';
+    Modal,
+    Button,
+    Form,
+    SelectPicker,
+    InputNumber,
+    Input,
+    Message,
+    useToaster,
+    ButtonGroup,
+    Loader,
+    Checkbox,
+  } from 'rsuite';
+  import authFetch from '../../helpers/authFetch';
+  import { CONDITION_OPTIONS, FINISH_OPTIONS } from './CardEntryFormOptions';
 
- const PRINTING_PREVIEW_HEIGHT = 70;
- const PRINTING_PREVIEW_BORDER_RADIUS = 4;
- const PRINTING_PREVIEW_MARGIN_TOP = 8;
+  const PRINTING_PREVIEW_HEIGHT = 70;
+  const PRINTING_PREVIEW_BORDER_RADIUS = 4;
+  const PRINTING_PREVIEW_MARGIN_TOP = 8;
 
- const EditEntryModal = ({ open, onClose, entry, collectionId, onUpdated }) => {
-   const [formData, setFormData] = useState({
-     scryfall_id: null,
-     quantity: 1,
-     condition: 'NM',
-     finish: 'nonfoil',
-     purchase_price: '',
-     notes: '',
-   });
+  const EditEntryModal = ({ open, onClose, entry, collectionId, deckType, onUpdated }) => {
+    const [formData, setFormData] = useState({
+      scryfall_id: null,
+      quantity: 1,
+      condition: 'NM',
+      finish: 'nonfoil',
+      purchase_price: '',
+      notes: '',
+      is_commander: false,
+      is_signature_spell: false,
+    });
    const [error, setError] = useState('');
    const [submitting, setSubmitting] = useState(false);
    const [printings, setPrintings] = useState([]);
@@ -44,6 +47,8 @@ import {
         finish: finish,
         purchase_price: entry.purchase_price != null ? entry.purchase_price : '',
         notes: entry.notes || '',
+        is_commander: entry.is_commander || false,
+        is_signature_spell: entry.is_signature_spell || false,
       });
       setOriginalScryfallId(entry.scryfall_id);
       setError('');
@@ -108,6 +113,14 @@ import {
       }
 
       body.notes = formData.notes.trim() || null;
+
+      // Include commander/signature spell flags if applicable
+      if (deckType === 'COMMANDER' || deckType === 'OATHBREAKER') {
+        body.is_commander = formData.is_commander;
+      }
+      if (deckType === 'OATHBREAKER') {
+        body.is_signature_spell = formData.is_signature_spell;
+      }
 
       const response = await authFetch(
         `/collections/${collectionId}/entries/${entry.id}`,
@@ -265,6 +278,34 @@ import {
               placeholder="Optional notes"
             />
           </Form.Group>
+
+          {(deckType === 'COMMANDER' || deckType === 'OATHBREAKER') && (
+            <Form.Group>
+              <Checkbox
+                checked={formData.is_commander}
+                onChange={(_, checked) => {
+                  setField('is_commander', checked);
+                  if (checked && deckType === 'OATHBREAKER') setField('is_signature_spell', false);
+                }}
+              >
+                {deckType === 'OATHBREAKER' ? 'Oathbreaker' : 'Commander'}
+              </Checkbox>
+            </Form.Group>
+          )}
+
+          {deckType === 'OATHBREAKER' && (
+            <Form.Group>
+              <Checkbox
+                checked={formData.is_signature_spell}
+                onChange={(_, checked) => {
+                  setField('is_signature_spell', checked);
+                  if (checked) setField('is_commander', false);
+                }}
+              >
+                Signature Spell
+              </Checkbox>
+            </Form.Group>
+          )}
         </Form>
       </Modal.Body>
       <Modal.Footer>

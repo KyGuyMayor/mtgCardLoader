@@ -2,13 +2,10 @@ const db = require('../src/db');
 const https = require('https');
 const { randomUUID } = require('crypto');
 const { rateLimitedRequest, RateLimitTimeoutError } = require('../src/helpers/rateLimiter');
-const { DECK_FORMAT_RULES, isBasicLand } = require('../src/helpers/deckRules');
+const { DECK_FORMAT_RULES, isBasicLand, arePartnersCompatible } = require('../src/helpers/deckRules');
 
 const VALID_TYPES = ['TRADE_BINDER', 'DECK'];
-const VALID_DECK_TYPES = [
-  'COMMANDER', 'STANDARD', 'MODERN', 'LEGACY',
-  'VINTAGE', 'PIONEER', 'PAUPER', 'DRAFT', 'PLANAR_STANDARD', 'OTHER'
-];
+const VALID_DECK_TYPES = Object.keys(DECK_FORMAT_RULES);
 const VALID_VISIBILITY = ['PRIVATE', 'INVITE_ONLY', 'PUBLIC'];
 
 const keepAliveAgent = new https.Agent({ keepAlive: true });
@@ -219,6 +216,7 @@ exports.getById = async (req, res) => {
         'notes',
         'is_commander',
         'is_sideboard',
+        'is_signature_spell',
         'created_at',
         'updated_at'
       )
@@ -478,7 +476,7 @@ exports.validate = async (req, res) => {
     // Get all entries for this collection
     const entries = await db('collection_entries')
       .where({ collection_id: id })
-      .select('id', 'scryfall_id', 'quantity', 'is_commander', 'is_sideboard');
+      .select('id', 'scryfall_id', 'quantity', 'is_commander', 'is_sideboard', 'is_signature_spell');
 
     // Initialize result
     const errors = [];
@@ -523,7 +521,8 @@ exports.validate = async (req, res) => {
     const entryToCopyName = {};
     let mainDeckCount = 0;
     let sideboardCount = 0;
-    let commanderEntry = null;
+    const commanderEntries = [];
+    const signatureSpellEntries = [];
 
     entries.forEach(entry => {
       const card = cardDataMap[entry.scryfall_id];
@@ -538,7 +537,10 @@ exports.validate = async (req, res) => {
           mainDeckCount += qty;
         }
         if (entry.is_commander) {
-          commanderEntry = { entry, card };
+          commanderEntries.push({ entry, card });
+        }
+        if (entry.is_signature_spell) {
+          signatureSpellEntries.push({ entry, card });
         }
       }
     });
@@ -663,55 +665,104 @@ exports.validate = async (req, res) => {
       });
     }
 
-    // Commander-specific validation
+    // Commander-specific validation (Commander and Oathbreaker formats)
     if (formatRules.requiresCommander) {
-      // Validate exactly one commander
-      if (!commanderEntry) {
+      const isOathbreaker = collection.deck_type === 'OATHBREAKER';
+      const commanderLabel = formatRules.commanderLabel || 'Commander';
+      const commanderType = formatRules.commanderType || 'creature';
+      const maxCommanders = formatRules.maxCommanders || 1;
+
+      if (commanderEntries.length === 0) {
+        // No commander designated
         errors.push({
-          type: 'COMMANDER_MISSING',
-          message: 'Deck must have exactly one commander',
+          type: isOathbreaker ? 'OATHBREAKER_MISSING' : 'COMMANDER_MISSING',
+          message: `Deck must have a ${commanderLabel.toLowerCase()}`,
           cards: [],
         });
+      } else if (commanderEntries.length > maxCommanders) {
+        // Too many commanders
+        errors.push({
+          type: isOathbreaker ? 'OATHBREAKER_COUNT' : 'COMMANDER_COUNT',
+          message: `Too many cards designated as ${commanderLabel} (${commanderEntries.length} found, maximum ${maxCommanders})`,
+          cards: commanderEntries.map(ce => ({ name: ce.card.name, scryfall_id: ce.entry.scryfall_id })),
+        });
       } else {
-        const { entry: cmdEntry, card: cmdCard } = commanderEntry;
+        // 1 or 2 commanders — validate each individually
+        let allCommandersValid = true;
+        const commanderColorIdentity = [];
 
-        // Validate commander is legendary creature or has "can be your commander"
-        const isLegendaryCrature =
-          cmdCard.type_line &&
-          cmdCard.type_line.includes('Legendary') &&
-          cmdCard.type_line.includes('Creature');
+        commanderEntries.forEach(({ entry: cmdEntry, card: cmdCard }) => {
+          let isValid = false;
 
-        const hasCommanderText =
-          cmdCard.oracle_text &&
-          cmdCard.oracle_text.toLowerCase().includes('can be your commander');
+          if (commanderType === 'planeswalker') {
+            isValid = cmdCard.type_line && cmdCard.type_line.includes('Planeswalker');
+            if (!isValid) {
+              errors.push({
+                type: 'OATHBREAKER_INVALID',
+                message: `${cmdCard.name} is not a valid ${commanderLabel.toLowerCase()} (must be a Planeswalker)`,
+                cards: [{ name: cmdCard.name, scryfall_id: cmdEntry.scryfall_id }],
+              });
+              allCommandersValid = false;
+            }
+          } else {
+            const isLegendaryCreature =
+              cmdCard.type_line &&
+              cmdCard.type_line.includes('Legendary') &&
+              cmdCard.type_line.includes('Creature');
+            const hasCommanderText =
+              cmdCard.oracle_text &&
+              cmdCard.oracle_text.toLowerCase().includes('can be your commander');
+            const isBackground =
+              cmdCard.type_line && cmdCard.type_line.includes('Background');
 
-        if (!isLegendaryCrature && !hasCommanderText) {
-          errors.push({
-            type: 'COMMANDER_INVALID',
-            message: `${cmdCard.name} is not a valid commander (must be a legendary creature or have 'can be your commander' text)`,
-            cards: [{ name: cmdCard.name, scryfall_id: cmdEntry.scryfall_id }],
+            isValid = isLegendaryCreature || hasCommanderText || (commanderEntries.length === 2 && isBackground);
+            if (!isValid) {
+              errors.push({
+                type: 'COMMANDER_INVALID',
+                message: `${cmdCard.name} is not a valid ${commanderLabel.toLowerCase()} (must be a legendary creature or have 'can be your commander' text)`,
+                cards: [{ name: cmdCard.name, scryfall_id: cmdEntry.scryfall_id }],
+              });
+              allCommandersValid = false;
+            }
+          }
+
+          // Accumulate combined color identity
+          (cmdCard.color_identity || []).forEach(color => {
+            if (!commanderColorIdentity.includes(color)) {
+              commanderColorIdentity.push(color);
+            }
           });
-        } else {
-          // Validate color identity constraint
-          const commanderColorIdentity = cmdCard.color_identity || [];
+        });
+
+        // Validate partner compatibility when 2 commanders
+        if (commanderEntries.length === 2 && allCommandersValid) {
+          if (!arePartnersCompatible(commanderEntries[0].card, commanderEntries[1].card)) {
+            errors.push({
+              type: 'COMMANDER_PARTNER_INVALID',
+              message: `${commanderEntries[0].card.name} and ${commanderEntries[1].card.name} do not have compatible partner abilities`,
+              cards: commanderEntries.map(ce => ({ name: ce.card.name, scryfall_id: ce.entry.scryfall_id })),
+            });
+          }
+        }
+
+        // Validate color identity constraint
+        if (allCommandersValid) {
+          const commanderEntryIds = new Set(commanderEntries.map(ce => ce.entry.id));
+          const signatureSpellEntryIds = new Set(signatureSpellEntries.map(se => se.entry.id));
           const illegalCards = [];
 
           entries.forEach(entry => {
-            if (entry.id === cmdEntry.id) {
-              return; // Skip commander itself
-            }
+            if (commanderEntryIds.has(entry.id)) return;
+            if (isOathbreaker && signatureSpellEntryIds.has(entry.id)) return;
+
             const card = entryToCard[entry.id];
             if (card && !isBasicLand(card.name)) {
               const cardColorIdentity = card.color_identity || [];
-              // Check if card's color identity is a subset of commander's
               const isLegal = cardColorIdentity.every(color =>
                 commanderColorIdentity.includes(color)
               );
               if (!isLegal) {
-                illegalCards.push({
-                  name: card.name,
-                  scryfall_id: entry.scryfall_id,
-                });
+                illegalCards.push({ name: card.name, scryfall_id: entry.scryfall_id });
               }
             }
           });
@@ -719,27 +770,73 @@ exports.validate = async (req, res) => {
           if (illegalCards.length > 0) {
             errors.push({
               type: 'COLOR_IDENTITY',
-              message: `Some cards do not match commander's color identity`,
+              message: `Some cards do not match ${commanderLabel.toLowerCase()}'s color identity`,
               cards: illegalCards,
             });
           }
         }
       }
 
-      // Validate no sideboard (Commander format has no sideboard)
+      // Oathbreaker-specific: Validate Signature Spell
+      if (isOathbreaker) {
+        if (signatureSpellEntries.length === 0) {
+          errors.push({
+            type: 'SIGNATURE_SPELL_MISSING',
+            message: 'Deck must have exactly one Signature Spell',
+            cards: [],
+          });
+        } else if (signatureSpellEntries.length > 1) {
+          errors.push({
+            type: 'SIGNATURE_SPELL_COUNT',
+            message: `Deck must have exactly one Signature Spell (${signatureSpellEntries.length} found)`,
+            cards: signatureSpellEntries.map(se => ({ name: se.card.name, scryfall_id: se.entry.scryfall_id })),
+          });
+        } else {
+          const { entry: ssEntry, card: ssCard } = signatureSpellEntries[0];
+
+          const isInstantOrSorcery =
+            ssCard.type_line &&
+            (ssCard.type_line.includes('Instant') || ssCard.type_line.includes('Sorcery'));
+
+          if (!isInstantOrSorcery) {
+            errors.push({
+              type: 'SIGNATURE_SPELL_INVALID',
+              message: `${ssCard.name} is not a valid Signature Spell (must be an Instant or Sorcery)`,
+              cards: [{ name: ssCard.name, scryfall_id: ssEntry.scryfall_id }],
+            });
+          } else if (commanderEntries.length === 1) {
+            const oathbreakerColorIdentity = commanderEntries[0].card.color_identity || [];
+            const ssColorIdentity = ssCard.color_identity || [];
+            const ssColorIdentityMatches = ssColorIdentity.every(color =>
+              oathbreakerColorIdentity.includes(color)
+            );
+
+            if (!ssColorIdentityMatches) {
+              errors.push({
+                type: 'SIGNATURE_SPELL_COLOR',
+                message: `Signature Spell does not match Oathbreaker's color identity`,
+                cards: [{ name: ssCard.name, scryfall_id: ssEntry.scryfall_id }],
+              });
+            }
+          }
+        }
+      }
+
+      // Validate no sideboard (Commander/Oathbreaker format has no sideboard)
       if (sideboardCount > 0) {
         errors.push({
           type: 'SIDEBOARD_NOT_ALLOWED',
-          message: `Commander decks do not have sideboards (currently ${sideboardCount} sideboard cards)`,
+          message: `${commanderLabel} decks do not have sideboards (currently ${sideboardCount} sideboard cards)`,
           cards: [],
         });
       }
 
-      // Validate exactly 100 cards in main deck
-      if (mainDeckCount !== 100) {
+      // Validate deck size from format rules
+      const expectedDeckSize = formatRules.minDeckSize;
+      if (mainDeckCount !== expectedDeckSize) {
         errors.push({
           type: 'DECK_SIZE_MIN',
-          message: `Commander decks must have exactly 100 cards (currently ${mainDeckCount})`,
+          message: `${commanderLabel} decks must have exactly ${expectedDeckSize} cards (currently ${mainDeckCount})`,
           cards: [],
         });
       }
