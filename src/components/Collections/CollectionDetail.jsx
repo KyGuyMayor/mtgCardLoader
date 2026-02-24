@@ -1606,7 +1606,7 @@ const CollectionDetail = ({ readOnly = false, shareSlug = null }) => {
                          : custom
                            ? <GainLossCell dataKey={key} />
                            : key === 'name'
-                             ? <NameCell dataKey={key} errorMap={validationHighlights.errorMap} warningMap={validationHighlights.warningMap} />
+                             ? <NameCell dataKey={key} errorMap={validationHighlights.errorMap} warningMap={validationHighlights.warningMap} deckType={collection?.deck_type} />
                              : key === 'finish'
                                ? <FinishCell dataKey={key} />
                                : <Cell dataKey={key} />}
@@ -1623,6 +1623,7 @@ const CollectionDetail = ({ readOnly = false, shareSlug = null }) => {
               onClose={handleEditClose}
               entry={editEntry}
               collectionId={id}
+              deckType={collection?.deck_type}
               onUpdated={handleEntryUpdated}
             />
 

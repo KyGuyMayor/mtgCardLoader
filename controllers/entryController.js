@@ -27,7 +27,7 @@ async function findCollectionOrFail(id, user_id) {
 exports.create = async (req, res) => {
   const user_id = req.user.id;
   const { id } = req.params;
-  const { scryfall_id, quantity, condition, purchase_price, notes, is_commander, is_sideboard, finish } = req.body;
+  const { scryfall_id, quantity, condition, purchase_price, notes, is_commander, is_sideboard, finish, is_signature_spell } = req.body;
 
   if (!scryfall_id) {
     return res.status(400).json({ error: 'scryfall_id is required' });
@@ -54,9 +54,10 @@ exports.create = async (req, res) => {
         notes: notes || null,
         is_commander: is_commander || false,
         is_sideboard: is_sideboard || false,
+        is_signature_spell: is_signature_spell || false,
         finish: finish || 'nonfoil',
       })
-      .returning(['id', 'collection_id', 'scryfall_id', 'quantity', 'condition', 'purchase_price', 'notes', 'is_commander', 'is_sideboard', 'finish', 'created_at', 'updated_at']);
+      .returning(['id', 'collection_id', 'scryfall_id', 'quantity', 'condition', 'purchase_price', 'notes', 'is_commander', 'is_sideboard', 'is_signature_spell', 'finish', 'created_at', 'updated_at']);
 
     return res.status(201).json(entry);
   } catch (error) {
@@ -71,7 +72,7 @@ exports.create = async (req, res) => {
 exports.update = async (req, res) => {
   const user_id = req.user.id;
   const { id, entryId } = req.params;
-  const { scryfall_id, quantity, condition, purchase_price, notes, is_commander, is_sideboard, finish } = req.body;
+  const { scryfall_id, quantity, condition, purchase_price, notes, is_commander, is_sideboard, finish, is_signature_spell } = req.body;
 
   if (condition !== undefined && !VALID_CONDITIONS.includes(condition)) {
     return res.status(400).json({ error: `condition must be one of: ${VALID_CONDITIONS.join(', ')}` });
@@ -105,13 +106,14 @@ exports.update = async (req, res) => {
     if (notes !== undefined) updates.notes = notes;
     if (is_commander !== undefined) updates.is_commander = is_commander;
     if (is_sideboard !== undefined) updates.is_sideboard = is_sideboard;
+    if (is_signature_spell !== undefined) updates.is_signature_spell = is_signature_spell;
     if (finish !== undefined) updates.finish = finish;
     updates.updated_at = db.fn.now();
 
     const [updated] = await db('collection_entries')
       .where({ id: entryId })
       .update(updates)
-      .returning(['id', 'collection_id', 'scryfall_id', 'quantity', 'condition', 'purchase_price', 'notes', 'is_commander', 'is_sideboard', 'finish', 'created_at', 'updated_at']);
+      .returning(['id', 'collection_id', 'scryfall_id', 'quantity', 'condition', 'purchase_price', 'notes', 'is_commander', 'is_sideboard', 'is_signature_spell', 'finish', 'created_at', 'updated_at']);
 
     return res.status(200).json(updated);
   } catch (error) {
@@ -151,60 +153,61 @@ exports.remove = async (req, res) => {
 };
 
 exports.bulkCreate = async (req, res) => {
-   const user_id = req.user.id;
-   const { id } = req.params;
-   const { entries } = req.body;
+    const user_id = req.user.id;
+    const { id } = req.params;
+    const { entries } = req.body;
 
-   if (!Array.isArray(entries) || entries.length === 0) {
-     return res.status(400).json({ error: 'entries array is required and must not be empty' });
-   }
+    if (!Array.isArray(entries) || entries.length === 0) {
+      return res.status(400).json({ error: 'entries array is required and must not be empty' });
+    }
 
-   if (entries.length > 500) {
-     return res.status(400).json({ error: 'Maximum 500 entries per request' });
-   }
+    if (entries.length > 500) {
+      return res.status(400).json({ error: 'Maximum 500 entries per request' });
+    }
 
-   try {
-     await findCollectionOrFail(id, user_id);
+    try {
+      await findCollectionOrFail(id, user_id);
 
-     // Validate all entries before inserting
-     for (const entry of entries) {
-       if (!entry.scryfall_id) {
-         return res.status(400).json({ error: 'All entries must have scryfall_id' });
-       }
-       if (entry.condition && !VALID_CONDITIONS.includes(entry.condition)) {
-         return res.status(400).json({ error: `condition must be one of: ${VALID_CONDITIONS.join(', ')}` });
-       }
-     }
+      // Validate all entries before inserting
+      for (const entry of entries) {
+        if (!entry.scryfall_id) {
+          return res.status(400).json({ error: 'All entries must have scryfall_id' });
+        }
+        if (entry.condition && !VALID_CONDITIONS.includes(entry.condition)) {
+          return res.status(400).json({ error: `condition must be one of: ${VALID_CONDITIONS.join(', ')}` });
+        }
+      }
 
-     // Prepare entries for insertion
-     const entriesToInsert = entries.map((entry) => ({
-       collection_id: id,
-       scryfall_id: entry.scryfall_id,
-       quantity: entry.quantity || 1,
-       condition: entry.condition || 'NM',
-       purchase_price: entry.purchase_price || null,
-       notes: entry.notes || null,
-       is_commander: entry.is_commander || false,
-       is_sideboard: entry.is_sideboard || false,
-       finish: entry.finish || 'nonfoil',
-       created_at: db.fn.now(),
-       updated_at: db.fn.now(),
-     }));
+      // Prepare entries for insertion
+      const entriesToInsert = entries.map((entry) => ({
+        collection_id: id,
+        scryfall_id: entry.scryfall_id,
+        quantity: entry.quantity || 1,
+        condition: entry.condition || 'NM',
+        purchase_price: entry.purchase_price || null,
+        notes: entry.notes || null,
+        is_commander: entry.is_commander || false,
+        is_sideboard: entry.is_sideboard || false,
+        is_signature_spell: entry.is_signature_spell || false,
+        finish: entry.finish || 'nonfoil',
+        created_at: db.fn.now(),
+        updated_at: db.fn.now(),
+      }));
 
-     // Bulk insert
-     const inserted = await db('collection_entries')
-       .insert(entriesToInsert)
-       .returning(['id', 'collection_id', 'scryfall_id', 'quantity', 'condition', 'purchase_price', 'notes', 'is_commander', 'is_sideboard', 'finish', 'created_at', 'updated_at']);
+      // Bulk insert
+      const inserted = await db('collection_entries')
+        .insert(entriesToInsert)
+        .returning(['id', 'collection_id', 'scryfall_id', 'quantity', 'condition', 'purchase_price', 'notes', 'is_commander', 'is_sideboard', 'is_signature_spell', 'finish', 'created_at', 'updated_at']);
 
-     return res.status(201).json({ imported: inserted.length, entries: inserted });
-   } catch (error) {
-     if (error instanceof CollectionError) {
-       return res.status(error.status).json({ error: error.message });
-     }
-     console.error('Bulk create entries error:', error.message);
-     return res.status(500).json({ error: 'Internal server error' });
-   }
-};
+      return res.status(201).json({ imported: inserted.length, entries: inserted });
+    } catch (error) {
+      if (error instanceof CollectionError) {
+        return res.status(error.status).json({ error: error.message });
+      }
+      console.error('Bulk create entries error:', error.message);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  };
 
 exports.bulkDelete = async (req, res) => {
   const user_id = req.user.id;

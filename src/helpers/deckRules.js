@@ -113,7 +113,25 @@ const DECK_FORMAT_RULES = {
     sideboardSize: 0,
     singleton: true,
     requiresCommander: true,
+    commanderLabel: 'Commander',
+    maxCommanders: 2,
     scryfallLegalityKey: 'commander',
+  },
+  OATHBREAKER: {
+    name: 'Oathbreaker',
+    minDeckSize: 60,
+    maxDeckSize: 60,
+    maxCopies: 1,
+    basicLandExempt: true,
+    sideboardSize: 0,
+    singleton: true,
+    requiresCommander: true,
+    commanderLabel: 'Oathbreaker',
+    commanderType: 'planeswalker',
+    maxCommanders: 1,
+    requiresSignatureSpell: true,
+    scryfallLegalityKey: 'oathbreaker',
+    description: 'Multiplayer singleton format with a Planeswalker Oathbreaker and a Signature Spell in the command zone.',
   },
   DRAFT: {
     name: 'Draft',
@@ -182,7 +200,52 @@ function isBasicLand(cardName) {
   return false;
 }
 
+/**
+ * Checks if two commander cards have compatible partner abilities.
+ * Supports: Partner, Partner with [Name], Friends forever,
+ * Choose a Background + Background, Doctor's companion + Time Lord.
+ *
+ * @param {object} card1 - First commander card (Scryfall card object)
+ * @param {object} card2 - Second commander card (Scryfall card object)
+ * @returns {boolean} - True if the two cards can legally share the command zone
+ */
+function arePartnersCompatible(card1, card2) {
+  const text1 = (card1.oracle_text || '').toLowerCase();
+  const text2 = (card2.oracle_text || '').toLowerCase();
+  const type1 = card1.type_line || '';
+  const type2 = card2.type_line || '';
+
+  // Generic "Partner" — both must have the keyword (but NOT "Partner with")
+  const hasGenericPartner = (text) =>
+    /\bpartner\b/.test(text) && !/\bpartner with\b/.test(text);
+  if (hasGenericPartner(text1) && hasGenericPartner(text2)) return true;
+
+  // "Partner with [Name]" — each card names the other
+  const getPartnerWithName = (text) => {
+    const match = text.match(/partner with ([^\n(]+)/);
+    return match ? match[1].trim() : null;
+  };
+  const pw1 = getPartnerWithName(text1);
+  const pw2 = getPartnerWithName(text2);
+  if (pw1 && pw1 === card2.name.toLowerCase()) return true;
+  if (pw2 && pw2 === card1.name.toLowerCase()) return true;
+
+  // "Friends forever" — both must have the keyword
+  if (text1.includes('friends forever') && text2.includes('friends forever')) return true;
+
+  // "Choose a Background" + Background enchantment
+  if (text1.includes('choose a background') && type2.includes('Background')) return true;
+  if (text2.includes('choose a background') && type1.includes('Background')) return true;
+
+  // "Doctor's companion" + Time Lord Doctor
+  if (text1.includes("doctor's companion") && type2.includes('Time Lord')) return true;
+  if (text2.includes("doctor's companion") && type1.includes('Time Lord')) return true;
+
+  return false;
+}
+
 module.exports = {
   DECK_FORMAT_RULES,
   isBasicLand,
+  arePartnersCompatible,
 };

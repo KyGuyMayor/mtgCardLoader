@@ -16,7 +16,7 @@ import { DECK_FORMAT_RULES, isBasicLand } from '../../helpers/deckRules';
 import { CONDITION_OPTIONS, FINISH_OPTIONS } from './CardEntryFormOptions';
 
 const CONSTRUCTED_DECK_TYPES = [
-   'COMMANDER', 'STANDARD', 'MODERN', 'LEGACY', 'VINTAGE', 'PIONEER', 'PAUPER', 'PLANAR_STANDARD',
+   'COMMANDER', 'STANDARD', 'MODERN', 'LEGACY', 'VINTAGE', 'PIONEER', 'PAUPER', 'PLANAR_STANDARD', 'OATHBREAKER',
  ];
 
  const PRINTING_PREVIEW_HEIGHT = 70;
@@ -24,16 +24,17 @@ const CONSTRUCTED_DECK_TYPES = [
  const PRINTING_PREVIEW_MARGIN_TOP = 8;
 
  const INITIAL_FORM = {
-   collection_id: null,
-   scryfall_id: null,
-   quantity: 1,
-   condition: 'NM',
-   finish: 'nonfoil',
-   purchase_price: '',
-   notes: '',
-   is_commander: false,
-   is_sideboard: false,
- };
+     collection_id: null,
+     scryfall_id: null,
+     quantity: 1,
+     condition: 'NM',
+     finish: 'nonfoil',
+     purchase_price: '',
+     notes: '',
+     is_commander: false,
+     is_sideboard: false,
+     is_signature_spell: false,
+   };
 
  const AddToCollectionModal = ({ open, onClose, onSuccess, scryfallId, cardName, card, preSelectedCollectionId }) => {
    const [formData, setFormData] = useState({ ...INITIAL_FORM });
@@ -97,6 +98,7 @@ const CONSTRUCTED_DECK_TYPES = [
 
   const selectedCollection = collections.find((c) => c.id === formData.collection_id);
   const isCommander = selectedCollection?.type === 'DECK' && selectedCollection?.deck_type === 'COMMANDER';
+  const isOathbreaker = selectedCollection?.type === 'DECK' && selectedCollection?.deck_type === 'OATHBREAKER';
   const isConstructed = selectedCollection?.type === 'DECK' && CONSTRUCTED_DECK_TYPES.includes(selectedCollection?.deck_type);
 
   const handleClose = () => {
@@ -132,6 +134,11 @@ const CONSTRUCTED_DECK_TYPES = [
 
       if (isCommander) {
         body.is_commander = formData.is_commander;
+      }
+
+      if (isOathbreaker) {
+        body.is_commander = formData.is_commander;
+        body.is_signature_spell = formData.is_signature_spell;
       }
 
       if (isConstructed) {
@@ -177,6 +184,7 @@ const CONSTRUCTED_DECK_TYPES = [
       if (field === 'collection_id') {
         next.is_commander = false;
         next.is_sideboard = false;
+        next.is_signature_spell = false;
         // Fetch collection details and validate when collection changes
         if (value) {
           validateCollectionForDeck(value);
@@ -236,6 +244,14 @@ const CONSTRUCTED_DECK_TYPES = [
         if (formatRules.legalSets && card.set && !formatRules.legalSets.includes(card.set)) {
           validationWarnings.push(
             `This card is not from a legal set in Planar Standard`
+          );
+        }
+      } else if (col.deck_type === 'OATHBREAKER') {
+        // Oathbreaker: check Scryfall oathbreaker legality
+        const legality = card.legalities?.oathbreaker;
+        if (legality !== 'legal' && legality !== 'restricted' && !isBasicLand(card.name)) {
+          validationWarnings.push(
+            `This card is not legal in Oathbreaker`
           );
         }
       }
@@ -449,13 +465,30 @@ const CONSTRUCTED_DECK_TYPES = [
               />
             </Form.Group>
 
-            {isCommander && (
+            {(isCommander || isOathbreaker) && (
               <Form.Group>
                 <Checkbox
                   checked={formData.is_commander}
-                  onChange={(_, checked) => setField('is_commander', checked)}
+                  onChange={(_, checked) => {
+                    setField('is_commander', checked);
+                    if (checked && isOathbreaker) setField('is_signature_spell', false);
+                  }}
                 >
-                  Commander
+                  {isOathbreaker ? 'Oathbreaker' : 'Commander'}
+                </Checkbox>
+              </Form.Group>
+            )}
+
+            {isOathbreaker && (
+              <Form.Group>
+                <Checkbox
+                  checked={formData.is_signature_spell}
+                  onChange={(_, checked) => {
+                    setField('is_signature_spell', checked);
+                    if (checked) setField('is_commander', false);
+                  }}
+                >
+                  Signature Spell
                 </Checkbox>
               </Form.Group>
             )}
