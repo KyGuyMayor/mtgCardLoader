@@ -176,20 +176,52 @@ exports.bulkCreate = async (req, res) => {
         if (entry.condition && !VALID_CONDITIONS.includes(entry.condition)) {
           return res.status(400).json({ error: `condition must be one of: ${VALID_CONDITIONS.join(', ')}` });
         }
+        if (entry.finish && !VALID_FINISHES.includes(entry.finish)) {
+          return res.status(400).json({ error: `finish must be one of: ${VALID_FINISHES.join(', ')}` });
+        }
       }
 
-      // Prepare entries for insertion
-      const entriesToInsert = entries.map((entry) => ({
+      // Deduplicate by (scryfall_id, condition, finish) and sum quantities
+      const dedupeMap = {};
+      for (const entry of entries) {
+        const condition = entry.condition || 'NM';
+        const finish = entry.finish || 'nonfoil';
+        const key = `${entry.scryfall_id}|${condition}|${finish}`;
+        
+        if (!dedupeMap[key]) {
+          dedupeMap[key] = {
+            scryfall_id: entry.scryfall_id,
+            quantity: 0,
+            condition,
+            finish,
+            purchase_price: entry.purchase_price || null,
+            notes: entry.notes || null,
+            is_commander: entry.is_commander || false,
+            is_sideboard: entry.is_sideboard || false,
+            is_signature_spell: entry.is_signature_spell || false,
+          };
+        }
+        dedupeMap[key].quantity += Number(entry.quantity) || 1;
+        if (!dedupeMap[key].purchase_price && entry.purchase_price) {
+          dedupeMap[key].purchase_price = entry.purchase_price;
+        }
+        if (!dedupeMap[key].notes && entry.notes) {
+          dedupeMap[key].notes = entry.notes;
+        }
+      }
+
+      // Prepare deduplicated entries for insertion
+      const entriesToInsert = Object.values(dedupeMap).map((entry) => ({
         collection_id: id,
         scryfall_id: entry.scryfall_id,
-        quantity: entry.quantity || 1,
-        condition: entry.condition || 'NM',
-        purchase_price: entry.purchase_price || null,
-        notes: entry.notes || null,
-        is_commander: entry.is_commander || false,
-        is_sideboard: entry.is_sideboard || false,
-        is_signature_spell: entry.is_signature_spell || false,
-        finish: entry.finish || 'nonfoil',
+        quantity: entry.quantity,
+        condition: entry.condition,
+        purchase_price: entry.purchase_price,
+        notes: entry.notes,
+        is_commander: entry.is_commander,
+        is_sideboard: entry.is_sideboard,
+        is_signature_spell: entry.is_signature_spell,
+        finish: entry.finish,
         created_at: db.fn.now(),
         updated_at: db.fn.now(),
       }));

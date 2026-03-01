@@ -497,16 +497,42 @@ const ImportCSVModal = ({ open, onClose, onImported }) => {
     let imported = 0;
     let failed = 0;
 
+    // Aggregate cards by (scryfall_id, condition, finish) to sum quantities
+    const aggregateMap = {};
+    toImport.forEach((card) => {
+      const key = `${card.scryfall_id}|${card.condition}|${card.finish || 'nonfoil'}`;
+      if (!aggregateMap[key]) {
+        aggregateMap[key] = {
+          scryfall_id: card.scryfall_id,
+          condition: card.condition,
+          finish: card.finish || 'nonfoil',
+          quantity: 0,
+          purchase_price: card.purchase_price || null,
+          notes: card.notes || null,
+        };
+      }
+      aggregateMap[key].quantity += card.count;
+      if (!aggregateMap[key].purchase_price && card.purchase_price) {
+        aggregateMap[key].purchase_price = card.purchase_price;
+      }
+      if (!aggregateMap[key].notes && card.notes) {
+        aggregateMap[key].notes = card.notes;
+      }
+    });
+
+    const aggregatedEntries = Object.values(aggregateMap);
+
     // Bulk import in chunks of 500 cards per request
     const CHUNK_SIZE = 500;
-    for (let i = 0; i < toImport.length; i += CHUNK_SIZE) {
-      const chunk = toImport.slice(i, i + CHUNK_SIZE);
+    for (let i = 0; i < aggregatedEntries.length; i += CHUNK_SIZE) {
+      const chunk = aggregatedEntries.slice(i, i + CHUNK_SIZE);
       const entries = chunk.map((card) => ({
         scryfall_id: card.scryfall_id,
-        quantity: card.count,
+        quantity: card.quantity,
         condition: card.condition,
-        finish: card.finish || 'nonfoil',
-        purchase_price: card.purchase_price || null,
+        finish: card.finish,
+        purchase_price: card.purchase_price,
+        notes: card.notes,
       }));
 
       try {
@@ -527,7 +553,7 @@ const ImportCSVModal = ({ open, onClose, onImported }) => {
       }
 
       // Small delay between chunks to avoid overwhelming server
-      if (i + CHUNK_SIZE < toImport.length) {
+      if (i + CHUNK_SIZE < aggregatedEntries.length) {
         await new Promise((r) => setTimeout(r, 50));
       }
     }

@@ -356,6 +356,7 @@ const CollectionDetail = ({ readOnly = false, shareSlug = null }) => {
           // Fetch remaining pages in background
           if (totalPagesCount > 1) {
             let allEnrichedData = enriched;
+            const seenEntryIds = new Set(enriched.map((e) => e.id));
 
             for (let page = 2; page <= totalPagesCount; page++) {
               if (!isMountedRef.current) break;
@@ -375,8 +376,19 @@ const CollectionDetail = ({ readOnly = false, shareSlug = null }) => {
 
                   const pageEnriched = enrichEntries(pageData.entries, pageCards);
 
+                  // Deduplicate by entry id before appending
+                  const newEntries = pageEnriched.filter((e) => {
+                    if (seenEntryIds.has(e.id)) {
+                      return false; // Skip duplicate
+                    }
+                    seenEntryIds.add(e.id);
+                    return true;
+                  });
+
                   // Append to table data
-                  allEnrichedData = allEnrichedData.concat(pageEnriched);
+                  if (newEntries.length > 0) {
+                    allEnrichedData = allEnrichedData.concat(newEntries);
+                  }
                   if (isMountedRef.current) {
                     setTableData(allEnrichedData);
                     setPaginationProgress(page / totalPagesCount);
