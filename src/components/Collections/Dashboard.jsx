@@ -19,6 +19,7 @@ import { isMobile } from 'react-device-detect';
 import NavigationBar from '../Shared/NavigationBar';
 import CreateCollectionModal from './CreateCollectionModal';
 import ImportCSVModal from './ImportCSVModal';
+import ImportDecklistModal from './ImportDecklistModal';
 import authFetch from '../../helpers/authFetch';
 
 const BADGE_COLORS = {
@@ -72,6 +73,7 @@ const Dashboard = () => {
   const [deleting, setDeleting] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showImportDecklistModal, setShowImportDecklistModal] = useState(false);
   const [validationCache, setValidationCache] = useState({});
   const validatingRef = useRef(new Set());
   const isMountedRef = useRef(true);
@@ -464,6 +466,13 @@ const Dashboard = () => {
                 >
                   Import CSV
                 </Button>
+                <Button
+                  appearance="ghost"
+                  block={isMobile}
+                  onClick={() => setShowImportDecklistModal(true)}
+                >
+                  Import Decklist
+                </Button>
               </div>
             </div>
 
@@ -604,6 +613,14 @@ const Dashboard = () => {
           <ImportCSVModal
             open={showImportModal}
             onClose={() => setShowImportModal(false)}
+            onImported={(data) => {
+              navigate(`/collections/${data.collectionId}`);
+            }}
+          />
+
+          <ImportDecklistModal
+            open={showImportDecklistModal}
+            onClose={() => setShowImportDecklistModal(false)}
             onImported={(data) => {
               navigate(`/collections/${data.collectionId}`);
             }}

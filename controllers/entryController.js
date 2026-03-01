@@ -186,7 +186,9 @@ exports.bulkCreate = async (req, res) => {
       for (const entry of entries) {
         const condition = entry.condition || 'NM';
         const finish = entry.finish || 'nonfoil';
-        const key = `${entry.scryfall_id}|${condition}|${finish}`;
+        const isCommander = entry.is_commander || false;
+        const isSideboard = entry.is_sideboard || false;
+        const key = `${entry.scryfall_id}|${condition}|${finish}|${isCommander}|${isSideboard}`;
         
         if (!dedupeMap[key]) {
           dedupeMap[key] = {

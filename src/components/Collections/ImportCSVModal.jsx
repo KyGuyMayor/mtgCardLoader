@@ -14,6 +14,7 @@ import {
   useToaster,
 } from 'rsuite';
 import authFetch from '../../helpers/authFetch';
+import { SCRYFALL_CHUNK_SIZE, SCRYFALL_DELAY_MS, TOAST_DURATION, STATUS_COLORS, StatusCell, getFrontFaceName, buildScryfallFoundMap, bulkImportEntries } from '../../helpers/importUtils';
 import { CollectionTypeSelector, DeckTypeSelector } from './CollectionTypeSelectors';
 
 const { Column, HeaderCell, Cell } = Table;
@@ -194,23 +195,6 @@ function parseCards(headers, rows, customMapping = null) {
     };
   }).filter((c) => c.name);
 }
-
-const STATUS_COLORS = {
-  pending: '#888',
-  matched: '#2ecc71',
-  unmatched: '#e74c3c',
-  skipped: '#f39c12',
-};
-
-const StatusCell = ({ rowData, ...props }) => (
-  <Cell {...props}>
-    <span style={{ color: STATUS_COLORS[rowData.status] || '#888' }}>
-      {rowData.status === 'matched' ? '✓ Matched' :
-       rowData.status === 'unmatched' ? '✗ Not Found' :
-       rowData.status === 'skipped' ? '— Skipped' : '…'}
-    </span>
-  </Cell>
-);
 
 const ImportCSVModal = ({ open, onClose, onImported }) => {
   const [file, setFile] = useState(null);
@@ -401,14 +385,12 @@ const ImportCSVModal = ({ open, onClose, onImported }) => {
     cancelRef.current = false;
     const updated = [...cards];
 
-    const CHUNK = 75;
-    for (let i = 0; i < updated.length; i += CHUNK) {
+    // Using SCRYFALL_CHUNK_SIZE from importUtils
+    for (let i = 0; i < updated.length; i += SCRYFALL_CHUNK_SIZE) {
       if (cancelRef.current) return;
-      const chunk = updated.slice(i, i + CHUNK);
+      const chunk = updated.slice(i, i + SCRYFALL_CHUNK_SIZE);
       const identifiers = chunk.map((c) => {
-        // For double-sided cards, use only the front face name for Scryfall matching
-        // e.g., "Delver of Secrets // Insectile Aberration" becomes "Delver of Secrets"
-        const cardName = c.name.includes(' // ') ? c.name.split(' // ')[0] : c.name;
+        const cardName = getFrontFaceName(c.name);
         
         if (c.edition) {
           return { name: cardName, set: c.edition };
@@ -427,21 +409,7 @@ const ImportCSVModal = ({ open, onClose, onImported }) => {
           const data = await res.json();
           const found = data.data || [];
 
-          const foundMap = {};
-           found.forEach((card) => {
-             const key = card.name.toLowerCase();
-             if (!foundMap[key]) foundMap[key] = card;
-             
-             // For double-sided cards, also index by individual face names
-             // e.g., "Delver of Secrets // Insectile Aberration" also indexes as "Delver of Secrets" and "Insectile Aberration"
-             if (card.name.includes(' // ')) {
-               const faces = card.name.split(' // ');
-               faces.forEach((face) => {
-                 const faceKey = face.toLowerCase();
-                 if (!foundMap[faceKey]) foundMap[faceKey] = card;
-               });
-             }
-           });
+          const foundMap = buildScryfallFoundMap(found);
 
           chunk.forEach((c, ci) => {
             const globalIdx = i + ci;
@@ -468,8 +436,8 @@ const ImportCSVModal = ({ open, onClose, onImported }) => {
       setMatchProgress(progress);
       setParsedCards([...updated]);
 
-      if (i + CHUNK < updated.length) {
-        await new Promise((r) => setTimeout(r, 100));
+      if (i + SCRYFALL_CHUNK_SIZE < updated.length) {
+        await new Promise((r) => setTimeout(r, SCRYFALL_DELAY_MS));
       }
     }
 
@@ -494,8 +462,6 @@ const ImportCSVModal = ({ open, onClose, onImported }) => {
 
     setImporting(true);
     setError('');
-    let imported = 0;
-    let failed = 0;
 
     // Aggregate cards by (scryfall_id, condition, finish) to sum quantities
     const aggregateMap = {};
@@ -522,41 +488,18 @@ const ImportCSVModal = ({ open, onClose, onImported }) => {
 
     const aggregatedEntries = Object.values(aggregateMap);
 
-    // Bulk import in chunks of 500 cards per request
-    const CHUNK_SIZE = 500;
-    for (let i = 0; i < aggregatedEntries.length; i += CHUNK_SIZE) {
-      const chunk = aggregatedEntries.slice(i, i + CHUNK_SIZE);
-      const entries = chunk.map((card) => ({
-        scryfall_id: card.scryfall_id,
-        quantity: card.quantity,
-        condition: card.condition,
-        finish: card.finish,
-        purchase_price: card.purchase_price,
-        notes: card.notes,
-      }));
+    const entries = aggregatedEntries.map((card) => ({
+      scryfall_id: card.scryfall_id,
+      quantity: card.quantity,
+      condition: card.condition,
+      finish: card.finish,
+      purchase_price: card.purchase_price,
+      notes: card.notes,
+    }));
 
-      try {
-        const res = await authFetch(`/collections/${collectionId}/entries/bulk`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ entries }),
-        });
-
-        if (res.ok || res.status === 201) {
-          const data = await res.json();
-          imported += data.imported || chunk.length;
-        } else {
-          failed += chunk.length;
-        }
-      } catch (err) {
-        failed += chunk.length;
-      }
-
-      // Small delay between chunks to avoid overwhelming server
-      if (i + CHUNK_SIZE < aggregatedEntries.length) {
-        await new Promise((r) => setTimeout(r, 50));
-      }
-    }
+    const result = await bulkImportEntries(collectionId, entries);
+    let imported = result.imported;
+    let failed = result.failed;
 
     setImporting(false);
 
@@ -565,7 +508,7 @@ const ImportCSVModal = ({ open, onClose, onImported }) => {
         Imported {imported} card{imported !== 1 ? 's' : ''}
         {failed > 0 ? ` (${failed} failed)` : ''}
       </Message>,
-      { placement: 'topCenter', duration: 4000 }
+      { placement: 'topCenter', duration: TOAST_DURATION }
     );
 
     if (onImported) onImported({ collectionId });
