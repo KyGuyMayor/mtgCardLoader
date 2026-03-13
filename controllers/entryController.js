@@ -27,7 +27,7 @@ async function findCollectionOrFail(id, user_id) {
 exports.create = async (req, res) => {
   const user_id = req.user.id;
   const { id } = req.params;
-  const { scryfall_id, quantity, condition, purchase_price, notes, is_commander, is_sideboard, finish, is_signature_spell } = req.body;
+  const { scryfall_id, quantity, condition, purchase_price, notes, is_commander, is_sideboard, finish, is_signature_spell, is_proxy } = req.body;
 
   if (!scryfall_id) {
     return res.status(400).json({ error: 'scryfall_id is required' });
@@ -39,6 +39,10 @@ exports.create = async (req, res) => {
 
   if (finish && !VALID_FINISHES.includes(finish)) {
     return res.status(400).json({ error: `finish must be one of: ${VALID_FINISHES.join(', ')}` });
+  }
+
+  if (is_proxy !== undefined && typeof is_proxy !== 'boolean') {
+    return res.status(400).json({ error: 'is_proxy must be a boolean' });
   }
 
   try {
@@ -56,8 +60,9 @@ exports.create = async (req, res) => {
         is_sideboard: is_sideboard || false,
         is_signature_spell: is_signature_spell || false,
         finish: finish || 'nonfoil',
+        is_proxy: is_proxy ?? false,
       })
-      .returning(['id', 'collection_id', 'scryfall_id', 'quantity', 'condition', 'purchase_price', 'notes', 'is_commander', 'is_sideboard', 'is_signature_spell', 'finish', 'created_at', 'updated_at']);
+      .returning(['id', 'collection_id', 'scryfall_id', 'quantity', 'condition', 'purchase_price', 'notes', 'is_commander', 'is_sideboard', 'is_signature_spell', 'finish', 'is_proxy', 'created_at', 'updated_at']);
 
     return res.status(201).json(entry);
   } catch (error) {
@@ -72,7 +77,7 @@ exports.create = async (req, res) => {
 exports.update = async (req, res) => {
   const user_id = req.user.id;
   const { id, entryId } = req.params;
-  const { scryfall_id, quantity, condition, purchase_price, notes, is_commander, is_sideboard, finish, is_signature_spell } = req.body;
+  const { scryfall_id, quantity, condition, purchase_price, notes, is_commander, is_sideboard, finish, is_signature_spell, is_proxy } = req.body;
 
   if (condition !== undefined && !VALID_CONDITIONS.includes(condition)) {
     return res.status(400).json({ error: `condition must be one of: ${VALID_CONDITIONS.join(', ')}` });
@@ -80,6 +85,10 @@ exports.update = async (req, res) => {
 
   if (finish !== undefined && !VALID_FINISHES.includes(finish)) {
     return res.status(400).json({ error: `finish must be one of: ${VALID_FINISHES.join(', ')}` });
+  }
+
+  if (is_proxy !== undefined && typeof is_proxy !== 'boolean') {
+    return res.status(400).json({ error: 'is_proxy must be a boolean' });
   }
 
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -108,12 +117,13 @@ exports.update = async (req, res) => {
     if (is_sideboard !== undefined) updates.is_sideboard = is_sideboard;
     if (is_signature_spell !== undefined) updates.is_signature_spell = is_signature_spell;
     if (finish !== undefined) updates.finish = finish;
+    if (is_proxy !== undefined) updates.is_proxy = is_proxy;
     updates.updated_at = db.fn.now();
 
     const [updated] = await db('collection_entries')
       .where({ id: entryId })
       .update(updates)
-      .returning(['id', 'collection_id', 'scryfall_id', 'quantity', 'condition', 'purchase_price', 'notes', 'is_commander', 'is_sideboard', 'is_signature_spell', 'finish', 'created_at', 'updated_at']);
+      .returning(['id', 'collection_id', 'scryfall_id', 'quantity', 'condition', 'purchase_price', 'notes', 'is_commander', 'is_sideboard', 'is_signature_spell', 'finish', 'is_proxy', 'created_at', 'updated_at']);
 
     return res.status(200).json(updated);
   } catch (error) {
@@ -179,14 +189,18 @@ exports.bulkCreate = async (req, res) => {
         if (entry.finish && !VALID_FINISHES.includes(entry.finish)) {
           return res.status(400).json({ error: `finish must be one of: ${VALID_FINISHES.join(', ')}` });
         }
+        if (entry.is_proxy !== undefined && typeof entry.is_proxy !== 'boolean') {
+          return res.status(400).json({ error: 'is_proxy must be a boolean' });
+        }
       }
 
-      // Deduplicate by (scryfall_id, condition, finish) and sum quantities
+      // Deduplicate by (scryfall_id, condition, finish, is_proxy) and sum quantities
       const dedupeMap = {};
       for (const entry of entries) {
         const condition = entry.condition || 'NM';
         const finish = entry.finish || 'nonfoil';
-        const key = `${entry.scryfall_id}|${condition}|${finish}`;
+        const isProxy = entry.is_proxy ?? false;
+        const key = `${entry.scryfall_id}|${condition}|${finish}|${isProxy}`;
         
         if (!dedupeMap[key]) {
           dedupeMap[key] = {
@@ -199,6 +213,7 @@ exports.bulkCreate = async (req, res) => {
             is_commander: entry.is_commander || false,
             is_sideboard: entry.is_sideboard || false,
             is_signature_spell: entry.is_signature_spell || false,
+            is_proxy: entry.is_proxy ?? false,
           };
         }
         dedupeMap[key].quantity += Number(entry.quantity) || 1;
@@ -222,6 +237,7 @@ exports.bulkCreate = async (req, res) => {
         is_sideboard: entry.is_sideboard,
         is_signature_spell: entry.is_signature_spell,
         finish: entry.finish,
+        is_proxy: entry.is_proxy,
         created_at: db.fn.now(),
         updated_at: db.fn.now(),
       }));
@@ -229,7 +245,7 @@ exports.bulkCreate = async (req, res) => {
       // Bulk insert
       const inserted = await db('collection_entries')
         .insert(entriesToInsert)
-        .returning(['id', 'collection_id', 'scryfall_id', 'quantity', 'condition', 'purchase_price', 'notes', 'is_commander', 'is_sideboard', 'is_signature_spell', 'finish', 'created_at', 'updated_at']);
+        .returning(['id', 'collection_id', 'scryfall_id', 'quantity', 'condition', 'purchase_price', 'notes', 'is_commander', 'is_sideboard', 'is_signature_spell', 'finish', 'is_proxy', 'created_at', 'updated_at']);
 
       return res.status(201).json({ imported: inserted.length, entries: inserted });
     } catch (error) {

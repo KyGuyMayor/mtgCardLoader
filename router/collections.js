@@ -8,7 +8,9 @@ const authenticate = require('../middleware/auth');
 router.use(authenticate);
 
 router.get('/', collectionController.list);
+router.get('/grand', collectionController.grand);
 router.get('/shared-with-me', collectionController.sharedWithMe);
+router.get('/card-locations/:scryfallId', collectionController.cardLocations);
 router.get('/:id/stats', collectionController.stats);
 router.get('/:id/validate', collectionController.validate);
 router.get('/:id/shares', collectionController.listShares);

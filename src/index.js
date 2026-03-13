@@ -5,7 +5,7 @@ import reportWebVitals from './reportWebVitals';
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import 'rsuite/dist/rsuite.min.css';
 
-import { Home, CardSearch, CardView, SetSearch, SetView, Login, Register, ForgotPassword, ResetPassword, CollectionsDashboard, CollectionDetail, SharedCollectionView, ProtectedRoute } from './components';
+import { Home, CardSearch, CardView, SetSearch, SetView, Login, Register, ForgotPassword, ResetPassword, CollectionsDashboard, CollectionDetail, GrandCollection, SharedCollectionView, ProtectedRoute } from './components';
 import { AuthProvider } from './components/Auth/AuthContext';
 
 ReactDOM.render(
@@ -18,6 +18,7 @@ ReactDOM.render(
         <Route path="/setsearch" element={<SetSearch />} />
         <Route path="/set/:id" element={<SetView />} />
         <Route path="/collections" element={<ProtectedRoute><CollectionsDashboard /></ProtectedRoute>} />
+        <Route path="/collections/grand" element={<ProtectedRoute><GrandCollection /></ProtectedRoute>} />
         <Route path="/collections/:id" element={<ProtectedRoute><CollectionDetail /></ProtectedRoute>} />
         <Route path="/shared/:slug" element={<SharedCollectionView />} />
         <Route path="/login" element={<Login />} />
