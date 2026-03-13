@@ -13,6 +13,8 @@
 
 # ai
 /scripts/ralph
+opencode.json
+.opencode/
 
 # misc
 .DS_Store

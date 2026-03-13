@@ -217,6 +217,7 @@ exports.getById = async (req, res) => {
         'is_commander',
         'is_sideboard',
         'is_signature_spell',
+        'is_proxy',
         'created_at',
         'updated_at'
       )
@@ -349,7 +350,7 @@ exports.stats = async (req, res) => {
     // Get all entries for this collection
     const entries = await db('collection_entries')
       .where({ collection_id: id })
-      .select('id', 'scryfall_id', 'quantity', 'purchase_price');
+      .select('id', 'scryfall_id', 'quantity', 'purchase_price', 'is_proxy');
 
     if (entries.length === 0) {
       // Return empty stats for empty collection
@@ -854,6 +855,131 @@ exports.validate = async (req, res) => {
   }
 };
 
+// ===== Grand Collection Endpoint =====
+
+exports.grand = async (req, res) => {
+  const user_id = req.user.id;
+
+  try {
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+
+    // Get all collection IDs owned by the user (not shared collections)
+    const userCollections = await db('collections')
+      .where('user_id', user_id)
+      .select('id', 'name', 'type', 'deck_type');
+
+    if (userCollections.length === 0) {
+      return res.status(200).json({
+        cards: [],
+        pagination: {
+          page,
+          limit,
+          total: 0,
+          totalPages: 0,
+        },
+      });
+    }
+
+    const collectionIds = userCollections.map(c => c.id);
+
+    // Get ALL unique scryfall_ids across user's collections
+    const allUniqueRows = await db('collection_entries')
+      .select('scryfall_id')
+      .distinct()
+      .whereIn('collection_id', collectionIds);
+
+    if (allUniqueRows.length === 0) {
+      return res.status(200).json({
+        cards: [],
+        pagination: {
+          page,
+          limit,
+          total: 0,
+          totalPages: 0,
+        },
+      });
+    }
+
+    const allScryfallIds = allUniqueRows.map(r => r.scryfall_id);
+    const totalCount = allScryfallIds.length;
+
+    // Apply pagination to the set of scryfall_ids
+    const offset = (page - 1) * limit;
+    const paginatedIds = allScryfallIds.sort().slice(offset, offset + limit);
+
+    if (paginatedIds.length === 0) {
+      return res.status(200).json({
+        cards: [],
+        pagination: {
+          page,
+          limit,
+          total: totalCount,
+          totalPages: Math.ceil(totalCount / limit),
+        },
+      });
+    }
+
+    // Aggregate entries by scryfall_id with all location details
+    const aggregatedCards = await db('collection_entries')
+      .join('collections', 'collection_entries.collection_id', 'collections.id')
+      .select(
+        'collection_entries.scryfall_id',
+        db.raw('SUM(collection_entries.quantity)::int as total_quantity'),
+        db.raw('SUM(CASE WHEN collection_entries.is_proxy = false THEN collection_entries.quantity ELSE 0 END)::int as total_real_quantity'),
+        db.raw('SUM(CASE WHEN collection_entries.is_proxy = true THEN collection_entries.quantity ELSE 0 END)::int as total_proxy_quantity')
+      )
+      .select(
+        db.raw(`
+          json_agg(
+            json_build_object(
+              'collection_id', collection_entries.collection_id,
+              'collection_name', collections.name,
+              'collection_type', collections.type,
+              'collection_deck_type', collections.deck_type,
+              'entry_id', collection_entries.id,
+              'quantity', collection_entries.quantity,
+              'condition', collection_entries.condition,
+              'finish', collection_entries.finish,
+              'purchase_price', collection_entries.purchase_price,
+              'is_proxy', collection_entries.is_proxy,
+              'is_commander', collection_entries.is_commander,
+              'is_sideboard', collection_entries.is_sideboard,
+              'notes', collection_entries.notes
+            )
+          ) as locations
+        `)
+      )
+      .whereIn('collection_entries.scryfall_id', paginatedIds)
+      .whereIn('collection_entries.collection_id', collectionIds)
+      .groupBy('collection_entries.scryfall_id')
+      .orderBy('collection_entries.scryfall_id');
+
+    // Clean up locations (remove nulls and format properly)
+    const formattedCards = aggregatedCards.map(card => ({
+      scryfall_id: card.scryfall_id,
+      total_quantity: parseInt(card.total_quantity, 10),
+      total_real_quantity: parseInt(card.total_real_quantity, 10),
+      total_proxy_quantity: parseInt(card.total_proxy_quantity, 10),
+      locations: (card.locations || []).filter(loc => loc !== null),
+    }));
+
+    return res.status(200).json({
+      cards: formattedCards,
+      pagination: {
+        page,
+        limit,
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / limit),
+      },
+    });
+  } catch (error) {
+    if (handleTimeoutError(error, res)) return;
+    console.error('Grand collection error:', error.message);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 // ===== Collection Sharing Endpoints =====
 
 exports.createShare = async (req, res) => {
@@ -967,6 +1093,59 @@ exports.deleteShare = async (req, res) => {
     return res.status(204).send();
   } catch (error) {
     console.error('Delete share error:', error.message);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// ===== Card Locations Endpoint =====
+
+exports.cardLocations = async (req, res) => {
+  const user_id = req.user.id;
+  const { scryfallId } = req.params;
+
+  try {
+    // Get all collection IDs owned by the user (not shared collections)
+    const userCollections = await db('collections')
+      .where('user_id', user_id)
+      .select('id');
+
+    if (userCollections.length === 0) {
+      return res.status(200).json([]);
+    }
+
+    const collectionIds = userCollections.map(c => c.id);
+
+    // Get all entries for the given scryfall_id across user's collections
+    const entries = await db('collection_entries')
+      .select(
+        'collection_entries.id as entry_id',
+        'collection_entries.collection_id',
+        'collection_entries.quantity',
+        'collection_entries.condition',
+        'collection_entries.finish',
+        'collection_entries.purchase_price',
+        'collection_entries.is_proxy',
+        'collection_entries.is_commander',
+        'collection_entries.is_sideboard',
+        'collection_entries.notes',
+        'collections.name as collection_name',
+        'collections.type as collection_type',
+        'collections.deck_type as deck_type'
+      )
+      .join('collections', 'collection_entries.collection_id', 'collections.id')
+      .where('collection_entries.scryfall_id', scryfallId)
+      .whereIn('collection_entries.collection_id', collectionIds)
+      .orderBy('collections.name');
+
+    // Return empty array if no entries found
+    if (entries.length === 0) {
+      return res.status(200).json([]);
+    }
+
+    return res.status(200).json(entries);
+  } catch (error) {
+    if (handleTimeoutError(error, res)) return;
+    console.error('Card locations error:', error.message);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };

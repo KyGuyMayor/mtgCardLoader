@@ -13,4 +13,5 @@ export { AuthProvider, useAuth } from "./Auth/AuthContext";
 export { default as ProtectedRoute } from "./Auth/ProtectedRoute";
 export { default as CollectionsDashboard } from "./Collections/Dashboard";
 export { default as CollectionDetail } from "./Collections/CollectionDetail";
+export { default as GrandCollection } from "./Collections/GrandCollection";
 export { default as SharedCollectionView } from "./Collections/SharedCollectionView";
